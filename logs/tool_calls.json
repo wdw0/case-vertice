@@ -1,0 +1,11 @@
+[
+  {
+    "question": "teste posso perguntar qualquer coisa?",
+    "round": 1,
+    "tool": null,
+    "arguments": {},
+    "payload": {
+      "final_answer": "Com certeza! Pode perguntar o que quiser. \n\nEu estou aqui para ajudar você com uma grande variedade de tarefas, desde dúvidas simples até processos mais complexos. Para você ter uma ideia, eu posso:\n\n*   **Pesquisar na internet** para trazer informações atualizadas.\n*   **Analisar e criar arquivos** (como planilhas Excel, documentos Word, apresentações em PowerPoint e PDFs).\n*   **Interagir com suas ferramentas de trabalho** (e-mails do Outlook, mensagens do Teams, arquivos no OneDrive/SharePoint e calendário).\n*   **Processar dados e gerar gráficos** usando código.\n*   **Ajudar com textos**, traduções, resumos e muito mais.\n\nO que está na sua mente agora? Como posso te ajudar hoje?"
+    }
+  }
+]

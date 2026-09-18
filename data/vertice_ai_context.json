@@ -1,0 +1,892 @@
+{
+  "schema_version": "1.1",
+  "generated_at": "2026-09-17T20:35:59.297647",
+  "source": {
+    "primary": "Data Room CSV + camada analítica determinística Python",
+    "dashboard_json": "process_data.json",
+    "dashboard_json_status": "requires_review",
+    "structured_views": "Derivadas deterministicamente dos CSVs do Data Room; não do process_data.json."
+  },
+  "executive_kpis": {
+    "comercial": {
+      "receita_bruta_aprovada": 18119023.83,
+      "pedidos_aprovados": 24454,
+      "ticket_medio_aprovado": 740.9431516316348
+    },
+    "margem": {
+      "margem_contribuicao_pre_devolucao": 9058427.55,
+      "margem_pct_pre_devolucao": 0.5434309913421581,
+      "margem_pct_pos_devolucao_receita_original": 0.45692108708599793,
+      "margem_pct_pos_devolucao_receita_retida": 0.5375577480127259,
+      "pedidos_margem_negativa_total": 491,
+      "pedidos_margem_negativa_aprovados": 427
+    },
+    "marketing": {
+      "cac_agregado": 1.825112176161491,
+      "roas_agregado": 4.17570734603202
+    },
+    "estoque": {
+      "dias_historico": 390,
+      "skus_em_ruptura": 99,
+      "skus_ruptura_alta_demanda": 21,
+      "skus_cobertura_gt_365d": 4679,
+      "custo_estoque_associado_alta_cobertura": 290451484.35
+    },
+    "atendimento": {
+      "tickets_validos": 35840,
+      "tickets_wismo": 10765,
+      "pct_wismo": 30.03627232142857,
+      "custo_wismo": 159660.0,
+      "csat_medio": 3.240736607142857
+    }
+  },
+  "opportunities": [
+    {
+      "id": "OPP-MAR-01",
+      "area": "margin",
+      "opportunity_type": "negative_margin_leakage",
+      "title": "Bloqueio e recalibração de frete/subsídio em pedidos de margem negativa",
+      "metric": "prejuizo_direto_pedidos_negativos",
+      "value": 6636.11,
+      "unit": "R$",
+      "impact_type": "observed",
+      "evidence": "Identificados 491 pedidos com margem negativa (427 nos aprovados), gerando perda direta de R$ 6,636.11. 100% desses pedidos tiveram frete cobrado (média de R$ 47.13 vs R$ 11.63 nos demais), evidenciando que o custo logístico supera a receita líquida gerada.",
+      "confidence": "high",
+      "status": "validated",
+      "source": [
+        "vendas.csv"
+      ],
+      "limitations": [
+        "Base restrita ao histórico registrado no e-commerce",
+        "Não modela elasticidade de demanda em caso de aumento do frete repassado"
+      ],
+      "notes": "Ajuste imediato de parametrização no checkout para regras de cesta mínima com frete subsidiado.",
+      "impact": 3.0,
+      "effort": 1.5,
+      "risk": 1.5,
+      "speed": 5.0
+    },
+    {
+      "id": "OPP-MAR-02",
+      "area": "margin",
+      "opportunity_type": "reverse_logistics_leakage",
+      "title": "Estancamento de erosão de margem por devoluções e logística reversa",
+      "metric": "erosao_margem_devolucoes",
+      "value": 1442029.83,
+      "unit": "R$",
+      "impact_type": "estimated",
+      "evidence": "Devoluções drenam R$ 1,442,029.83 da margem dos pedidos aprovados. A margem de contribuição cai de 54.34% (pré-devolução) para 45.69% sobre a receita vendida original e 53.76% sobre a receita retida.",
+      "confidence": "medium",
+      "status": "validated",
+      "source": [
+        "vendas.csv"
+      ],
+      "limitations": [
+        "Frete reverso assumido como espelho do frete original devido à ausência de campo específico na base",
+        "Custo de recondicionamento e avaria de produtos não registrado"
+      ],
+      "notes": "Revisão de tabelas de medidas, fotos de produtos e termos de devolução para estancar perdas.",
+      "impact": 4.5,
+      "effort": 3.0,
+      "risk": 2.0,
+      "speed": 4.0
+    },
+    {
+      "id": "OPP-MKT-01",
+      "area": "marketing",
+      "opportunity_type": "budget_efficiency_reallocation",
+      "title": "Testes de realocação incremental de verba para canais de alta eficiência de aquisição",
+      "metric": "diferencial_roas_canais",
+      "value": 4.746115158539945,
+      "unit": "x",
+      "impact_type": "potential",
+      "evidence": "Forte dispersão na eficiência agregada: o canal 'Influenciador' entrega ROAS agregado de 7.75x (CAC R$ 1.76), superando amplamente o canal 'Orgânico' (3.01x) e a média da empresa (4.18x). O investimento total analisado é de R$ 210,414,341.09 com R$ 878,628,709.80 em receita gerada.",
+      "confidence": "high",
+      "status": "validated",
+      "source": [
+        "marketing.csv"
+      ],
+      "limitations": [
+        "Base de marketing não possui correlação determinística 1:1 com pedidos de vendas.csv",
+        "Não permite afirmar margem líquida real nem LTV por canal",
+        "Decisão deve ser tratada via testes incrementais de sensibilidade com monitoramento do retorno marginal"
+      ],
+      "notes": "Executar teste controlado de realocação incremental de verba, sem percentual pré-fixado, acompanhando CAC marginal e ROAS marginal.",
+      "impact": 4.0,
+      "effort": 2.0,
+      "risk": 2.0,
+      "speed": 4.5
+    },
+    {
+      "id": "OPP-EST-01",
+      "area": "inventory",
+      "opportunity_type": "critical_stockout_recovery",
+      "title": "Reposição prioritária dos SKUs de alta demanda em ruptura",
+      "metric": "skus_top_quartil_em_ruptura",
+      "value": 21.0,
+      "unit": "SKUs",
+      "impact_type": "potential",
+      "evidence": "Identificados 21 SKUs pertencentes ao quartil superior de vendas (≥27 unidades vendidas) com estoque disponível zerado ou negativo (do total de 99 SKUs em ruptura). Essa ruptura bloqueia uma receita potencial estimada em R$ 43,900.97 durante o lead time de reposição.",
+      "confidence": "medium",
+      "status": "validated",
+      "source": [
+        "estoque.csv",
+        "vendas.csv"
+      ],
+      "limitations": [
+        "Estoque reflete um snapshot e vendas refletem um acumulado histórico de 390 dias",
+        "Demanda futura pode oscilar por sazonalidade ou alteração de campanha"
+      ],
+      "notes": "Acelerar compras emergenciais com fornecedores para os 21 produtos curva A.",
+      "impact": 4.5,
+      "effort": 2.0,
+      "risk": 1.5,
+      "speed": 4.5
+    },
+    {
+      "id": "OPP-EST-02",
+      "area": "inventory",
+      "opportunity_type": "excess_inventory_rationalization",
+      "title": "Racionalização e liberação de capital em SKUs com cobertura teórica >365 dias",
+      "metric": "capital_imobilizado_cobertura_elevada",
+      "value": 290451484.35,
+      "unit": "R$",
+      "impact_type": "potential",
+      "evidence": "Existem 4679 SKUs com cobertura teórica superior a 365 dias com base no giro histórico médio, associados a R$ 290,451,484.35 de custo unitário de estoque disponível; esse valor é uma estimativa de exposição a excesso potencial, não prova de estoque permanentemente parado.",
+      "confidence": "medium",
+      "status": "validated",
+      "source": [
+        "estoque.csv",
+        "vendas.csv"
+      ],
+      "limitations": [
+        "Trata-se de cobertura estritamente 'teórica'; o valor de estoque associado indica exposição potencial e não configura 'overstock garantido'",
+        "Não considera shelf life e custos específicos de armazenagem física"
+      ],
+      "notes": "Elaborar campanhas de bundle, liquidação promocional e congelamento de novas ordens de compra.",
+      "impact": 4.0,
+      "effort": 3.0,
+      "risk": 2.5,
+      "speed": 3.0
+    },
+    {
+      "id": "OPP-ATD-01",
+      "area": "support",
+      "opportunity_type": "wismo_automation",
+      "title": "Automação pró-ativa de rastreio e status de entrega (WISMO)",
+      "metric": "volume_chamados_wismo",
+      "value": 10765.0,
+      "unit": "tickets",
+      "impact_type": "historical",
+      "evidence": "A categoria 'Onde está meu pedido?' representa 10,765 tickets (30.0% do total de atendimentos), gerando custo operacional direto de R$ 159,660.00. Uma automação via WhatsApp/bot com envio pró-ativo de status pode reduzir parte desse volume repetitivo; a taxa efetiva de redução deverá ser medida em piloto.",
+      "confidence": "high",
+      "status": "validated",
+      "source": [
+        "atendimento.csv"
+      ],
+      "limitations": [
+        "Assume taxa de absorção tecnológica do cliente na adesão a canais digitais",
+        "Custo de integração da API de rastreio com transportadoras não detalhado na base"
+      ],
+      "notes": "Implementação de disparos de atualização de rota via bot para desonerar a central.",
+      "impact": 4.0,
+      "effort": 2.0,
+      "risk": 1.5,
+      "speed": 4.5
+    },
+    {
+      "id": "OPP-ATD-02",
+      "area": "support",
+      "opportunity_type": "high_ticket_support_concentration",
+      "title": "Investigação operacional da concentração de tickets em poucos clientes",
+      "metric": "tickets_concentrados_top5",
+      "value": 26405.0,
+      "unit": "tickets",
+      "impact_type": "observed",
+      "evidence": "Extrema assimetria no suporte: apenas 5 clientes concentram 26,405 chamados (73.7% do volume da central). O cliente principal (CLI-11830) abriu sozinho 14,355 tickets. Essa concentração sinaliza fricção operacional relevante nesses consumidores, mas a base atual não permite inferir risco individual de churn.",
+      "confidence": "high",
+      "status": "validated",
+      "source": [
+        "atendimento.csv",
+        "clientes.csv"
+      ],
+      "limitations": [
+        "A base textual requer futura classificação de NLP para inferir sentimento, urgência, motivo e eventual risco de churn individual"
+      ],
+      "notes": "Investigar os motivos recorrentes dos clientes concentradores e testar tratamento N2/causa-raiz antes de atribuir risco de churn.",
+      "impact": 3.5,
+      "effort": 1.5,
+      "risk": 1.0,
+      "speed": 5.0
+    }
+  ],
+  "priority_portfolio": [
+    {
+      "rank": 1,
+      "id": "OPP-ATD-02",
+      "oportunidade": "Investigação operacional da concentração de tickets em poucos clientes",
+      "area": "support",
+      "impacto": 3.5,
+      "impact_type": "observed",
+      "esforço": 1.5,
+      "risco": 1.0,
+      "velocidade": 5.0,
+      "confiança": "high",
+      "status": "validated",
+      "valor_metrica": 26405.0,
+      "unidade": "tickets",
+      "base_score": 87.1,
+      "score": 87.1,
+      "justificativa": "[Quick Win Imediato (Captura <30 dias com baixo esforço)] Score 87.1/100. Impacto=3.5, Velocidade=5.0, Esforço=1.5, Risco=1.0. Fator de Confiança=1.00 (high)."
+    },
+    {
+      "rank": 2,
+      "id": "OPP-ATD-01",
+      "oportunidade": "Automação pró-ativa de rastreio e status de entrega (WISMO)",
+      "area": "support",
+      "impacto": 4.0,
+      "impact_type": "historical",
+      "esforço": 2.0,
+      "risco": 1.5,
+      "velocidade": 4.5,
+      "confiança": "high",
+      "status": "validated",
+      "valor_metrica": 10765.0,
+      "unidade": "tickets",
+      "base_score": 84.1,
+      "score": 84.1,
+      "justificativa": "[Quick Win Imediato (Captura <30 dias com baixo esforço)] Score 84.1/100. Impacto=4.0, Velocidade=4.5, Esforço=2.0, Risco=1.5. Fator de Confiança=1.00 (high)."
+    },
+    {
+      "rank": 3,
+      "id": "OPP-MKT-01",
+      "oportunidade": "Testes de realocação incremental de verba para canais de alta eficiência de aquisição",
+      "area": "marketing",
+      "impacto": 4.0,
+      "impact_type": "potential",
+      "esforço": 2.0,
+      "risco": 2.0,
+      "velocidade": 4.5,
+      "confiança": "high",
+      "status": "validated",
+      "valor_metrica": 4.746115158539945,
+      "unidade": "x",
+      "base_score": 82.9,
+      "score": 82.9,
+      "justificativa": "[Quick Win Imediato (Captura <30 dias com baixo esforço)] Score 82.9/100. Impacto=4.0, Velocidade=4.5, Esforço=2.0, Risco=2.0. Fator de Confiança=1.00 (high)."
+    },
+    {
+      "rank": 4,
+      "id": "OPP-MAR-01",
+      "oportunidade": "Bloqueio e recalibração de frete/subsídio em pedidos de margem negativa",
+      "area": "margin",
+      "impacto": 3.0,
+      "impact_type": "observed",
+      "esforço": 1.5,
+      "risco": 1.5,
+      "velocidade": 5.0,
+      "confiança": "high",
+      "status": "validated",
+      "valor_metrica": 6636.11,
+      "unidade": "R$",
+      "base_score": 82.4,
+      "score": 82.4,
+      "justificativa": "[Quick Win Imediato (Captura <30 dias com baixo esforço)] Score 82.4/100. Impacto=3.0, Velocidade=5.0, Esforço=1.5, Risco=1.5. Fator de Confiança=1.00 (high)."
+    },
+    {
+      "rank": 5,
+      "id": "OPP-EST-01",
+      "oportunidade": "Reposição prioritária dos SKUs de alta demanda em ruptura",
+      "area": "inventory",
+      "impacto": 4.5,
+      "impact_type": "potential",
+      "esforço": 2.0,
+      "risco": 1.5,
+      "velocidade": 4.5,
+      "confiança": "medium",
+      "status": "validated",
+      "valor_metrica": 21.0,
+      "unidade": "SKUs",
+      "base_score": 87.6,
+      "score": 65.7,
+      "justificativa": "[Quick Win Imediato (Captura <30 dias com baixo esforço)] Score 65.7/100. Impacto=4.5, Velocidade=4.5, Esforço=2.0, Risco=1.5. Fator de Confiança=0.75 (medium)."
+    },
+    {
+      "rank": 6,
+      "id": "OPP-MAR-02",
+      "oportunidade": "Estancamento de erosão de margem por devoluções e logística reversa",
+      "area": "margin",
+      "impacto": 4.5,
+      "impact_type": "estimated",
+      "esforço": 3.0,
+      "risco": 2.0,
+      "velocidade": 4.0,
+      "confiança": "medium",
+      "status": "validated",
+      "valor_metrica": 1442029.83,
+      "unidade": "R$",
+      "base_score": 78.8,
+      "score": 59.1,
+      "justificativa": "[Iniciativa Estrutural Prioritária (Alto impacto e rápida captura)] Score 59.1/100. Impacto=4.5, Velocidade=4.0, Esforço=3.0, Risco=2.0. Fator de Confiança=0.75 (medium)."
+    },
+    {
+      "rank": 7,
+      "id": "OPP-EST-02",
+      "oportunidade": "Racionalização e liberação de capital em SKUs com cobertura teórica >365 dias",
+      "area": "inventory",
+      "impacto": 4.0,
+      "impact_type": "potential",
+      "esforço": 3.0,
+      "risco": 2.5,
+      "velocidade": 3.0,
+      "confiança": "medium",
+      "status": "validated",
+      "valor_metrica": 290451484.35,
+      "unidade": "R$",
+      "base_score": 68.2,
+      "score": 51.2,
+      "justificativa": "[Projeto Estruturante de Médio Prazo (60-90 dias)] Score 51.2/100. Impacto=4.0, Velocidade=3.0, Esforço=3.0, Risco=2.5. Fator de Confiança=0.75 (medium)."
+    }
+  ],
+  "governance": {
+    "dashboard_json_requires_review": true,
+    "human_in_the_loop": true,
+    "llm_role": "interpretar e sintetizar contexto estruturado; não recalcular KPIs",
+    "known_limits": [
+      "Estoque é snapshot e a cobertura é teórica.",
+      "Marketing e vendas não têm correspondência determinística 1:1 por cliente/pedido.",
+      "Frete reverso em devoluções é uma premissa estimada.",
+      "Risco individual de churn requer classificador/validação posterior de NLP."
+    ]
+  },
+  "analysis_views": {
+    "marketing_channels": [
+      {
+        "canal": "Influenciador",
+        "investimento_total": 28061599.02,
+        "receita_gerada_total": 217577980.41,
+        "conversoes_total": 15940484,
+        "roas": 7.7535845429,
+        "cac": 1.7603981799,
+        "campanhas": 465
+      },
+      {
+        "canal": "TikTok Ads",
+        "investimento_total": 29770101.07,
+        "receita_gerada_total": 139063375.68,
+        "conversoes_total": 17009948,
+        "roas": 4.6712429814,
+        "cac": 1.7501582644,
+        "campanhas": 488
+      },
+      {
+        "canal": "Instagram Ads",
+        "investimento_total": 30165772.33,
+        "receita_gerada_total": 135938587.47,
+        "conversoes_total": 15360484,
+        "roas": 4.506385117,
+        "cac": 1.9638555875,
+        "campanhas": 518
+      },
+      {
+        "canal": "Google Ads",
+        "investimento_total": 30224839.25,
+        "receita_gerada_total": 106557384.47,
+        "conversoes_total": 16118323,
+        "roas": 3.5254905275,
+        "cac": 1.8751851077,
+        "campanhas": 509
+      },
+      {
+        "canal": "Email Marketing",
+        "investimento_total": 29700531.98,
+        "receita_gerada_total": 91046211.86,
+        "conversoes_total": 16563197,
+        "roas": 3.0654741107,
+        "cac": 1.793164205,
+        "campanhas": 485
+      },
+      {
+        "canal": "Marketplace",
+        "investimento_total": 32682629.69,
+        "receita_gerada_total": 98795912.77,
+        "conversoes_total": 17894187,
+        "roas": 3.0228875004,
+        "cac": 1.8264383674,
+        "campanhas": 540
+      },
+      {
+        "canal": "Orgânico",
+        "investimento_total": 29808867.75,
+        "receita_gerada_total": 89649257.14,
+        "conversoes_total": 16401820,
+        "roas": 3.0074693843,
+        "cac": 1.8174121988,
+        "campanhas": 495
+      }
+    ],
+    "inventory_stockouts_high_demand": [
+      {
+        "sku_id": "SKU-01224",
+        "nome_produto": "Kit Skincare Delicado Prata",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 49.0,
+        "receita_historica": 6901.58,
+        "margem_historica": 4096.02,
+        "lead_time_reposicao": 46,
+        "preco_venda_sugerido": 712.92
+      },
+      {
+        "sku_id": "SKU-00842",
+        "nome_produto": "Máscara de Cílios Artesanal Verde",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 48.0,
+        "receita_historica": 9241.08,
+        "margem_historica": 4971.74,
+        "lead_time_reposicao": 58,
+        "preco_venda_sugerido": 502.23
+      },
+      {
+        "sku_id": "SKU-00539",
+        "nome_produto": "Óleo Corporal Luxo Azul",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 45.0,
+        "receita_historica": 9463.66,
+        "margem_historica": 4936.51,
+        "lead_time_reposicao": 54,
+        "preco_venda_sugerido": 103.74
+      },
+      {
+        "sku_id": "SKU-00992",
+        "nome_produto": "Batom Sport Branco",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 43.0,
+        "receita_historica": 8681.0,
+        "margem_historica": 4811.24,
+        "lead_time_reposicao": 59,
+        "preco_venda_sugerido": 214.58
+      },
+      {
+        "sku_id": "SKU-04664",
+        "nome_produto": "Sérum Facial Sport Preto",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 40.0,
+        "receita_historica": 8827.12,
+        "margem_historica": 4685.4,
+        "lead_time_reposicao": 48,
+        "preco_venda_sugerido": 782.86
+      },
+      {
+        "sku_id": "SKU-04862",
+        "nome_produto": "Condicionador Básico Rosa",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 40.0,
+        "receita_historica": 7860.2,
+        "margem_historica": 4411.1,
+        "lead_time_reposicao": 60,
+        "preco_venda_sugerido": 469.7
+      },
+      {
+        "sku_id": "SKU-02674",
+        "nome_produto": "Porta-Retrato Exclusivo Rosa",
+        "categoria": "Lifestyle",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 39.0,
+        "receita_historica": 5857.16,
+        "margem_historica": 3082.28,
+        "lead_time_reposicao": 10,
+        "preco_venda_sugerido": 281.33
+      },
+      {
+        "sku_id": "SKU-00152",
+        "nome_produto": "Esfoliante Premium Prata",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 39.0,
+        "receita_historica": 8482.9,
+        "margem_historica": 4816.07,
+        "lead_time_reposicao": 47,
+        "preco_venda_sugerido": 1012.06
+      },
+      {
+        "sku_id": "SKU-01567",
+        "nome_produto": "Óculos de Sol Urban Dourado",
+        "categoria": "Acessórios",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 37.0,
+        "receita_historica": 11008.14,
+        "margem_historica": 5837.96,
+        "lead_time_reposicao": 53,
+        "preco_venda_sugerido": 122.03
+      },
+      {
+        "sku_id": "SKU-02584",
+        "nome_produto": "Máscara de Cílios Artesanal Azul",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 36.0,
+        "receita_historica": 5486.22,
+        "margem_historica": 3220.48,
+        "lead_time_reposicao": 55,
+        "preco_venda_sugerido": 329.79
+      },
+      {
+        "sku_id": "SKU-03636",
+        "nome_produto": "Kit Skincare Urban Preto",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 34.0,
+        "receita_historica": 6736.78,
+        "margem_historica": 3770.26,
+        "lead_time_reposicao": 58,
+        "preco_venda_sugerido": 647.13
+      },
+      {
+        "sku_id": "SKU-00456",
+        "nome_produto": "Base Líquida Luxo Nude",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 32.0,
+        "receita_historica": 5400.94,
+        "margem_historica": 3465.46,
+        "lead_time_reposicao": 45,
+        "preco_venda_sugerido": 606.6
+      },
+      {
+        "sku_id": "SKU-04395",
+        "nome_produto": "Creme Hidratante Exclusivo Branco",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 32.0,
+        "receita_historica": 4875.59,
+        "margem_historica": 3106.38,
+        "lead_time_reposicao": 50,
+        "preco_venda_sugerido": 565.62
+      },
+      {
+        "sku_id": "SKU-00362",
+        "nome_produto": "Perfume Urban Preto",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 30.0,
+        "receita_historica": 5622.2,
+        "margem_historica": 2973.54,
+        "lead_time_reposicao": 48,
+        "preco_venda_sugerido": 560.12
+      },
+      {
+        "sku_id": "SKU-00454",
+        "nome_produto": "Protetor Solar Básico Preto",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 30.0,
+        "receita_historica": 4973.51,
+        "margem_historica": 2628.02,
+        "lead_time_reposicao": 46,
+        "preco_venda_sugerido": 605.39
+      },
+      {
+        "sku_id": "SKU-03553",
+        "nome_produto": "Máscara de Cílios Exclusivo Branco",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 30.0,
+        "receita_historica": 5489.3,
+        "margem_historica": 3418.5,
+        "lead_time_reposicao": 56,
+        "preco_venda_sugerido": 681.83
+      },
+      {
+        "sku_id": "SKU-04630",
+        "nome_produto": "Creme Hidratante Edição Limitada Nude",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 30.0,
+        "receita_historica": 5594.14,
+        "margem_historica": 3367.63,
+        "lead_time_reposicao": 57,
+        "preco_venda_sugerido": 388.18
+      },
+      {
+        "sku_id": "SKU-03992",
+        "nome_produto": "Protetor Solar Básico Prata",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 29.0,
+        "receita_historica": 5283.33,
+        "margem_historica": 3063.79,
+        "lead_time_reposicao": 58,
+        "preco_venda_sugerido": 255.16
+      },
+      {
+        "sku_id": "SKU-02557",
+        "nome_produto": "Sombra Clássico Prata",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 28.0,
+        "receita_historica": 4127.66,
+        "margem_historica": 2484.64,
+        "lead_time_reposicao": 45,
+        "preco_venda_sugerido": 175.1
+      },
+      {
+        "sku_id": "SKU-03656",
+        "nome_produto": "Kit Skincare Urban Nude",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 28.0,
+        "receita_historica": 5831.4,
+        "margem_historica": 2709.71,
+        "lead_time_reposicao": 9,
+        "preco_venda_sugerido": 108.45
+      },
+      {
+        "sku_id": "SKU-01010",
+        "nome_produto": "Esfoliante Delicado Nude",
+        "categoria": "Beleza",
+        "estoque_disponivel": 0,
+        "unidades_vendidas": 27.0,
+        "receita_historica": 4055.21,
+        "margem_historica": 2388.39,
+        "lead_time_reposicao": 60,
+        "preco_venda_sugerido": 400.77
+      }
+    ],
+    "inventory_high_coverage": [
+      {
+        "sku_id": "SKU-03328",
+        "nome_produto": "Blusa de Tricô Clássico Nude",
+        "categoria": "Moda",
+        "estoque_disponivel": 1141,
+        "unidades_vendidas": 37.0,
+        "cobertura_teorica_dias": 12026.7567567568,
+        "custo_unitario": 392.81,
+        "capital_exposicao": 448196.21
+      },
+      {
+        "sku_id": "SKU-02667",
+        "nome_produto": "Regata Artesanal Bege",
+        "categoria": "Moda",
+        "estoque_disponivel": 1183,
+        "unidades_vendidas": 30.0,
+        "cobertura_teorica_dias": 15379.0,
+        "custo_unitario": 361.07,
+        "capital_exposicao": 427145.81
+      },
+      {
+        "sku_id": "SKU-01049",
+        "nome_produto": "Camiseta Artesanal Branco",
+        "categoria": "Moda",
+        "estoque_disponivel": 1018,
+        "unidades_vendidas": 27.0,
+        "cobertura_teorica_dias": 14704.4444444444,
+        "custo_unitario": 399.33,
+        "capital_exposicao": 406517.94
+      },
+      {
+        "sku_id": "SKU-03050",
+        "nome_produto": "Camisa Social Slim Verde",
+        "categoria": "Moda",
+        "estoque_disponivel": 1060,
+        "unidades_vendidas": 25.0,
+        "cobertura_teorica_dias": 16536.0,
+        "custo_unitario": 381.44,
+        "capital_exposicao": 404326.4
+      },
+      {
+        "sku_id": "SKU-03341",
+        "nome_produto": "Shorts Moderno Azul",
+        "categoria": "Moda",
+        "estoque_disponivel": 1098,
+        "unidades_vendidas": 19.0,
+        "cobertura_teorica_dias": 22537.8947368421,
+        "custo_unitario": 367.97,
+        "capital_exposicao": 404031.0600000001
+      },
+      {
+        "sku_id": "SKU-00729",
+        "nome_produto": "Saia Artesanal Verde",
+        "categoria": "Moda",
+        "estoque_disponivel": 1021,
+        "unidades_vendidas": 24.0,
+        "cobertura_teorica_dias": 16591.25,
+        "custo_unitario": 388.4,
+        "capital_exposicao": 396556.4
+      },
+      {
+        "sku_id": "SKU-00222",
+        "nome_produto": "Calça Jeans Exclusivo Branco",
+        "categoria": "Moda",
+        "estoque_disponivel": 985,
+        "unidades_vendidas": 28.0,
+        "cobertura_teorica_dias": 13719.6428571429,
+        "custo_unitario": 394.4,
+        "capital_exposicao": 388484.0
+      },
+      {
+        "sku_id": "SKU-03090",
+        "nome_produto": "Legging Sustentável Azul",
+        "categoria": "Moda",
+        "estoque_disponivel": 1009,
+        "unidades_vendidas": 30.0,
+        "cobertura_teorica_dias": 13117.0,
+        "custo_unitario": 380.15,
+        "capital_exposicao": 383571.35
+      },
+      {
+        "sku_id": "SKU-04035",
+        "nome_produto": "Vestido Oversize Verde",
+        "categoria": "Moda",
+        "estoque_disponivel": 1004,
+        "unidades_vendidas": 12.0,
+        "cobertura_teorica_dias": 32630.0,
+        "custo_unitario": 377.58,
+        "capital_exposicao": 379090.32
+      },
+      {
+        "sku_id": "SKU-02549",
+        "nome_produto": "Calça Jeans Edição Limitada Preto",
+        "categoria": "Moda",
+        "estoque_disponivel": 1076,
+        "unidades_vendidas": 8.0,
+        "cobertura_teorica_dias": 52455.0,
+        "custo_unitario": 347.23,
+        "capital_exposicao": 373619.48
+      },
+      {
+        "sku_id": "SKU-03132",
+        "nome_produto": "Saia Exclusivo Vermelho",
+        "categoria": "Moda",
+        "estoque_disponivel": 987,
+        "unidades_vendidas": 23.0,
+        "cobertura_teorica_dias": 16736.0869565217,
+        "custo_unitario": 366.91,
+        "capital_exposicao": 362140.17
+      },
+      {
+        "sku_id": "SKU-00742",
+        "nome_produto": "Regata Luxo Prata",
+        "categoria": "Moda",
+        "estoque_disponivel": 994,
+        "unidades_vendidas": 20.0,
+        "cobertura_teorica_dias": 19383.0,
+        "custo_unitario": 362.97,
+        "capital_exposicao": 360792.1800000001
+      },
+      {
+        "sku_id": "SKU-02306",
+        "nome_produto": "Top Delicado Azul",
+        "categoria": "Moda",
+        "estoque_disponivel": 987,
+        "unidades_vendidas": 5.0,
+        "cobertura_teorica_dias": 76986.0,
+        "custo_unitario": 364.71,
+        "capital_exposicao": 359968.77
+      },
+      {
+        "sku_id": "SKU-02463",
+        "nome_produto": "Legging Sport Verde",
+        "categoria": "Moda",
+        "estoque_disponivel": 1044,
+        "unidades_vendidas": 25.0,
+        "cobertura_teorica_dias": 16286.4,
+        "custo_unitario": 340.23,
+        "capital_exposicao": 355200.12
+      },
+      {
+        "sku_id": "SKU-02996",
+        "nome_produto": "Blusa de Tricô Exclusivo Verde",
+        "categoria": "Moda",
+        "estoque_disponivel": 892,
+        "unidades_vendidas": 6.0,
+        "cobertura_teorica_dias": 57980.0,
+        "custo_unitario": 388.45,
+        "capital_exposicao": 346497.4
+      }
+    ],
+    "support_top_customers": [
+      {
+        "customer_id": "CLI-11830",
+        "tickets": 14355,
+        "custo": 214510.0,
+        "csat": 3.2179728318,
+        "share_pct": 40.0530133929
+      },
+      {
+        "customer_id": "CLI-01729",
+        "tickets": 7457,
+        "custo": 111008.0,
+        "csat": 3.2439318761,
+        "share_pct": 20.8063616071
+      },
+      {
+        "customer_id": "CLI-14211",
+        "tickets": 2101,
+        "custo": 31180.0,
+        "csat": 3.2646358877,
+        "share_pct": 5.8621651786
+      },
+      {
+        "customer_id": "CLI-12360",
+        "tickets": 1302,
+        "custo": 19312.0,
+        "csat": 3.2373271889,
+        "share_pct": 3.6328125
+      },
+      {
+        "customer_id": "CLI-03910",
+        "tickets": 1190,
+        "custo": 17132.0,
+        "csat": 3.2571428571,
+        "share_pct": 3.3203125
+      },
+      {
+        "customer_id": "CLI-02474",
+        "tickets": 804,
+        "custo": 11782.0,
+        "csat": 3.1865671642,
+        "share_pct": 2.2433035714
+      },
+      {
+        "customer_id": "CLI-06160",
+        "tickets": 732,
+        "custo": 10625.0,
+        "csat": 3.3155737705,
+        "share_pct": 2.0424107143
+      },
+      {
+        "customer_id": "CLI-07163",
+        "tickets": 619,
+        "custo": 9014.0,
+        "csat": 3.2277867528,
+        "share_pct": 1.7271205357
+      },
+      {
+        "customer_id": "CLI-10455",
+        "tickets": 586,
+        "custo": 8949.0,
+        "csat": 3.2559726962,
+        "share_pct": 1.6350446429
+      },
+      {
+        "customer_id": "CLI-13668",
+        "tickets": 435,
+        "custo": 5793.0,
+        "csat": 3.2528735632,
+        "share_pct": 1.2137276786
+      }
+    ],
+    "method_notes": {
+      "marketing_channels": "Agregado por canal; ROAS = receita_gerada_total / investimento_total; CAC = investimento_total / conversoes_total.",
+      "inventory_stockouts_high_demand": "SKU em ruptura e no quartil superior de unidades vendidas; histórico de vendas = 390 dias; q75 = 27 unidades.",
+      "inventory_high_coverage": "Cobertura teórica = estoque disponível / demanda média diária; exposição calculada como estoque disponível × custo unitário.",
+      "support_top_customers": "Ordenação por quantidade de tickets válidos; concentração não implica churn individual."
+    }
+  }
+}
