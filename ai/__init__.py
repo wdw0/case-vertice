@@ -1,1 +1,0 @@
-"""Vértice Intelligence package."""
