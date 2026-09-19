@@ -5,14 +5,7 @@
     "primary": "Data Room CSV + camada analítica determinística Python",
     "dashboard_json": "process_data.json",
     "dashboard_json_status": "requires_review",
-    "structured_views": "Derivadas deterministicamente dos CSVs do Data Room; não do process_data.json.",
-    "copilot_scope": {
-      "sales": "Data Room completo após exclusão do registro de vendas com campos financeiros ausentes; KPIs comerciais usam o universo aprovado quando indicado.",
-      "marketing": "marketing.csv completo após limpeza de tipos; ROAS/CAC usam receita_gerada, investimento_reais e conversoes da própria base.",
-      "inventory": "estoque.csv completo cruzado com vendas.csv limpo; cobertura e ruptura usam o histórico completo de vendas e o snapshot de estoque.",
-      "support": "atendimento.csv completo após exclusão do registro artefato ticket_id=TKT.",
-      "dashboard_relationship": "process_data.json é artefato de dashboard com escopo temporal próprio; não é fonte factual do Copilot."
-    }
+    "structured_views": "Derivadas deterministicamente dos CSVs do Data Room; não do process_data.json."
   },
   "executive_kpis": {
     "comercial": {
@@ -363,9 +356,7 @@
       "Estoque é snapshot e a cobertura é teórica.",
       "Marketing e vendas não têm correspondência determinística 1:1 por cliente/pedido.",
       "Frete reverso em devoluções é uma premissa estimada.",
-      "Risco individual de churn requer classificador/validação posterior de NLP.",
-      "Pedidos em ruptura não têm perda realizada observada por SKU; a ferramenta pode estimar receita potencial bloqueada durante o lead time, que deve ser tratada como potencial.",
-      "Para SKUs com cobertura teórica elevada, custo_estoque_associado é exposição potencial baseada em custo, não perda realizada nem prova de estoque permanentemente parado."
+      "Risco individual de churn requer classificador/validação posterior de NLP."
     ]
   },
   "analysis_views": {
@@ -444,10 +435,7 @@
         "receita_historica": 6901.58,
         "margem_historica": 4096.02,
         "lead_time_reposicao": 46,
-        "preco_venda_sugerido": 712.92,
-        "demanda_media_diaria": 0.12564102564102564,
-        "receita_potencial_bloqueada_estimada": 4120.312,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 712.92
       },
       {
         "sku_id": "SKU-00842",
@@ -458,10 +446,7 @@
         "receita_historica": 9241.08,
         "margem_historica": 4971.74,
         "lead_time_reposicao": 58,
-        "preco_venda_sugerido": 502.23,
-        "demanda_media_diaria": 0.12307692307692308,
-        "receita_potencial_bloqueada_estimada": 3585.1495384615387,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 502.23
       },
       {
         "sku_id": "SKU-00539",
@@ -472,10 +457,7 @@
         "receita_historica": 9463.66,
         "margem_historica": 4936.51,
         "lead_time_reposicao": 54,
-        "preco_venda_sugerido": 103.74,
-        "demanda_media_diaria": 0.11538461538461539,
-        "receita_potencial_bloqueada_estimada": 646.38,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 103.74
       },
       {
         "sku_id": "SKU-00992",
@@ -486,10 +468,7 @@
         "receita_historica": 8681.0,
         "margem_historica": 4811.24,
         "lead_time_reposicao": 59,
-        "preco_venda_sugerido": 214.58,
-        "demanda_media_diaria": 0.11025641025641025,
-        "receita_potencial_bloqueada_estimada": 1395.8704102564104,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 214.58
       },
       {
         "sku_id": "SKU-04664",
@@ -500,10 +479,7 @@
         "receita_historica": 8827.12,
         "margem_historica": 4685.4,
         "lead_time_reposicao": 48,
-        "preco_venda_sugerido": 782.86,
-        "demanda_media_diaria": 0.10256410256410256,
-        "receita_potencial_bloqueada_estimada": 3854.0800000000004,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 782.86
       },
       {
         "sku_id": "SKU-04862",
@@ -514,10 +490,7 @@
         "receita_historica": 7860.2,
         "margem_historica": 4411.1,
         "lead_time_reposicao": 60,
-        "preco_venda_sugerido": 469.7,
-        "demanda_media_diaria": 0.10256410256410256,
-        "receita_potencial_bloqueada_estimada": 2890.461538461538,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 469.7
       },
       {
         "sku_id": "SKU-02674",
@@ -528,10 +501,7 @@
         "receita_historica": 5857.16,
         "margem_historica": 3082.28,
         "lead_time_reposicao": 10,
-        "preco_venda_sugerido": 281.33,
-        "demanda_media_diaria": 0.1,
-        "receita_potencial_bloqueada_estimada": 281.33,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 281.33
       },
       {
         "sku_id": "SKU-00152",
@@ -542,10 +512,7 @@
         "receita_historica": 8482.9,
         "margem_historica": 4816.07,
         "lead_time_reposicao": 47,
-        "preco_venda_sugerido": 1012.06,
-        "demanda_media_diaria": 0.1,
-        "receita_potencial_bloqueada_estimada": 4756.682,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 1012.06
       },
       {
         "sku_id": "SKU-01567",
@@ -556,10 +523,7 @@
         "receita_historica": 11008.14,
         "margem_historica": 5837.96,
         "lead_time_reposicao": 53,
-        "preco_venda_sugerido": 122.03,
-        "demanda_media_diaria": 0.09487179487179487,
-        "receita_potencial_bloqueada_estimada": 613.5918717948717,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 122.03
       },
       {
         "sku_id": "SKU-02584",
@@ -570,10 +534,7 @@
         "receita_historica": 5486.22,
         "margem_historica": 3220.48,
         "lead_time_reposicao": 55,
-        "preco_venda_sugerido": 329.79,
-        "demanda_media_diaria": 0.09230769230769231,
-        "receita_potencial_bloqueada_estimada": 1674.3184615384619,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 329.79
       },
       {
         "sku_id": "SKU-03636",
@@ -584,10 +545,7 @@
         "receita_historica": 6736.78,
         "margem_historica": 3770.26,
         "lead_time_reposicao": 58,
-        "preco_venda_sugerido": 647.13,
-        "demanda_media_diaria": 0.08717948717948718,
-        "receita_potencial_bloqueada_estimada": 3272.154769230769,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 647.13
       },
       {
         "sku_id": "SKU-00456",
@@ -598,10 +556,7 @@
         "receita_historica": 5400.94,
         "margem_historica": 3465.46,
         "lead_time_reposicao": 45,
-        "preco_venda_sugerido": 606.6,
-        "demanda_media_diaria": 0.08205128205128205,
-        "receita_potencial_bloqueada_estimada": 2239.7538461538466,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 606.6
       },
       {
         "sku_id": "SKU-04395",
@@ -612,10 +567,7 @@
         "receita_historica": 4875.59,
         "margem_historica": 3106.38,
         "lead_time_reposicao": 50,
-        "preco_venda_sugerido": 565.62,
-        "demanda_media_diaria": 0.08205128205128205,
-        "receita_potencial_bloqueada_estimada": 2320.4923076923073,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 565.62
       },
       {
         "sku_id": "SKU-00362",
@@ -626,10 +578,7 @@
         "receita_historica": 5622.2,
         "margem_historica": 2973.54,
         "lead_time_reposicao": 48,
-        "preco_venda_sugerido": 560.12,
-        "demanda_media_diaria": 0.07692307692307693,
-        "receita_potencial_bloqueada_estimada": 2068.1353846153847,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 560.12
       },
       {
         "sku_id": "SKU-00454",
@@ -640,10 +589,7 @@
         "receita_historica": 4973.51,
         "margem_historica": 2628.02,
         "lead_time_reposicao": 46,
-        "preco_venda_sugerido": 605.39,
-        "demanda_media_diaria": 0.07692307692307693,
-        "receita_potencial_bloqueada_estimada": 2142.149230769231,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 605.39
       },
       {
         "sku_id": "SKU-03553",
@@ -654,10 +600,7 @@
         "receita_historica": 5489.3,
         "margem_historica": 3418.5,
         "lead_time_reposicao": 56,
-        "preco_venda_sugerido": 681.83,
-        "demanda_media_diaria": 0.07692307692307693,
-        "receita_potencial_bloqueada_estimada": 2937.1138461538467,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 681.83
       },
       {
         "sku_id": "SKU-04630",
@@ -668,10 +611,7 @@
         "receita_historica": 5594.14,
         "margem_historica": 3367.63,
         "lead_time_reposicao": 57,
-        "preco_venda_sugerido": 388.18,
-        "demanda_media_diaria": 0.07692307692307693,
-        "receita_potencial_bloqueada_estimada": 1702.0200000000002,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 388.18
       },
       {
         "sku_id": "SKU-03992",
@@ -682,10 +622,7 @@
         "receita_historica": 5283.33,
         "margem_historica": 3063.79,
         "lead_time_reposicao": 58,
-        "preco_venda_sugerido": 255.16,
-        "demanda_media_diaria": 0.07435897435897436,
-        "receita_potencial_bloqueada_estimada": 1100.459282051282,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 255.16
       },
       {
         "sku_id": "SKU-02557",
@@ -696,10 +633,7 @@
         "receita_historica": 4127.66,
         "margem_historica": 2484.64,
         "lead_time_reposicao": 45,
-        "preco_venda_sugerido": 175.1,
-        "demanda_media_diaria": 0.07179487179487179,
-        "receita_potencial_bloqueada_estimada": 565.7076923076922,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 175.1
       },
       {
         "sku_id": "SKU-03656",
@@ -710,10 +644,7 @@
         "receita_historica": 5831.4,
         "margem_historica": 2709.71,
         "lead_time_reposicao": 9,
-        "preco_venda_sugerido": 108.45,
-        "demanda_media_diaria": 0.07179487179487179,
-        "receita_potencial_bloqueada_estimada": 70.0753846153846,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 108.45
       },
       {
         "sku_id": "SKU-01010",
@@ -724,10 +655,7 @@
         "receita_historica": 4055.21,
         "margem_historica": 2388.39,
         "lead_time_reposicao": 60,
-        "preco_venda_sugerido": 400.77,
-        "demanda_media_diaria": 0.06923076923076923,
-        "receita_potencial_bloqueada_estimada": 1664.7369230769232,
-        "impacto_ruptura_tipo": "potential_revenue_blocked"
+        "preco_venda_sugerido": 400.77
       }
     ],
     "inventory_high_coverage": [
@@ -739,9 +667,7 @@
         "unidades_vendidas": 37.0,
         "cobertura_teorica_dias": 12026.7567567568,
         "custo_unitario": 392.81,
-        "capital_exposicao": 448196.21,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 448196.21
       },
       {
         "sku_id": "SKU-02667",
@@ -751,9 +677,7 @@
         "unidades_vendidas": 30.0,
         "cobertura_teorica_dias": 15379.0,
         "custo_unitario": 361.07,
-        "capital_exposicao": 427145.81,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 427145.81
       },
       {
         "sku_id": "SKU-01049",
@@ -763,9 +687,7 @@
         "unidades_vendidas": 27.0,
         "cobertura_teorica_dias": 14704.4444444444,
         "custo_unitario": 399.33,
-        "capital_exposicao": 406517.94,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 406517.94
       },
       {
         "sku_id": "SKU-03050",
@@ -775,9 +697,7 @@
         "unidades_vendidas": 25.0,
         "cobertura_teorica_dias": 16536.0,
         "custo_unitario": 381.44,
-        "capital_exposicao": 404326.4,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 404326.4
       },
       {
         "sku_id": "SKU-03341",
@@ -787,9 +707,7 @@
         "unidades_vendidas": 19.0,
         "cobertura_teorica_dias": 22537.8947368421,
         "custo_unitario": 367.97,
-        "capital_exposicao": 404031.0600000001,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 404031.0600000001
       },
       {
         "sku_id": "SKU-00729",
@@ -799,9 +717,7 @@
         "unidades_vendidas": 24.0,
         "cobertura_teorica_dias": 16591.25,
         "custo_unitario": 388.4,
-        "capital_exposicao": 396556.4,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 396556.4
       },
       {
         "sku_id": "SKU-00222",
@@ -811,9 +727,7 @@
         "unidades_vendidas": 28.0,
         "cobertura_teorica_dias": 13719.6428571429,
         "custo_unitario": 394.4,
-        "capital_exposicao": 388484.0,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 388484.0
       },
       {
         "sku_id": "SKU-03090",
@@ -823,9 +737,7 @@
         "unidades_vendidas": 30.0,
         "cobertura_teorica_dias": 13117.0,
         "custo_unitario": 380.15,
-        "capital_exposicao": 383571.35,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 383571.35
       },
       {
         "sku_id": "SKU-04035",
@@ -835,9 +747,7 @@
         "unidades_vendidas": 12.0,
         "cobertura_teorica_dias": 32630.0,
         "custo_unitario": 377.58,
-        "capital_exposicao": 379090.32,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 379090.32
       },
       {
         "sku_id": "SKU-02549",
@@ -847,9 +757,7 @@
         "unidades_vendidas": 8.0,
         "cobertura_teorica_dias": 52455.0,
         "custo_unitario": 347.23,
-        "capital_exposicao": 373619.48,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 373619.48
       },
       {
         "sku_id": "SKU-03132",
@@ -859,9 +767,7 @@
         "unidades_vendidas": 23.0,
         "cobertura_teorica_dias": 16736.0869565217,
         "custo_unitario": 366.91,
-        "capital_exposicao": 362140.17,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 362140.17
       },
       {
         "sku_id": "SKU-00742",
@@ -871,9 +777,7 @@
         "unidades_vendidas": 20.0,
         "cobertura_teorica_dias": 19383.0,
         "custo_unitario": 362.97,
-        "capital_exposicao": 360792.1800000001,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 360792.1800000001
       },
       {
         "sku_id": "SKU-02306",
@@ -883,9 +787,7 @@
         "unidades_vendidas": 5.0,
         "cobertura_teorica_dias": 76986.0,
         "custo_unitario": 364.71,
-        "capital_exposicao": 359968.77,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 359968.77
       },
       {
         "sku_id": "SKU-02463",
@@ -895,9 +797,7 @@
         "unidades_vendidas": 25.0,
         "cobertura_teorica_dias": 16286.4,
         "custo_unitario": 340.23,
-        "capital_exposicao": 355200.12,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 355200.12
       },
       {
         "sku_id": "SKU-02996",
@@ -907,9 +807,7 @@
         "unidades_vendidas": 6.0,
         "cobertura_teorica_dias": 57980.0,
         "custo_unitario": 388.45,
-        "capital_exposicao": 346497.4,
-        "exposicao_tipo": "potential_inventory_capital_exposure",
-        "exposicao_descricao": "Custo do estoque disponível associado à cobertura teórica >365 dias; não representa perda realizada nem estoque permanentemente parado."
+        "capital_exposicao": 346497.4
       }
     ],
     "support_top_customers": [

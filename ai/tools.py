@@ -15,7 +15,7 @@ class ToolExecution:
 
 
 class ToolRegistry:
-    """Deterministic business tools backed only by the structured AI context."""
+    """Ferramentas determinísticas apoiadas exclusivamente no contexto auditado."""
 
     def __init__(self, context: ContextStore):
         self.context = context
@@ -32,8 +32,7 @@ class ToolRegistry:
         arguments = arguments or {}
         if name not in self._handlers:
             raise KeyError(f"Tool desconhecida: {name}")
-        result = self._handlers[name](arguments)
-        return ToolExecution(name=name, arguments=arguments, result=result)
+        return ToolExecution(name=name, arguments=arguments, result=self._handlers[name](arguments))
 
     def names(self) -> List[str]:
         return list(self._handlers)
@@ -43,6 +42,11 @@ class ToolRegistry:
             "area": "margin",
             "kpis": self.context.kpis["margem"],
             "opportunities": self.context.opportunities_by_area("margin"),
+            "definitions": {
+                "margem_pre_devolucao": "margem de contribuição antes do efeito econômico das devoluções",
+                "margem_pos_devolucao_receita_original": "margem pós-devolução sobre a receita originalmente vendida",
+                "margem_pos_devolucao_receita_retida": "margem pós-devolução sobre a receita efetivamente retida",
+            },
             "governance": {
                 "confidence_and_limitations_required": True,
                 "note": "Devoluções usam premissa estimada de frete reverso espelhado.",
@@ -51,77 +55,117 @@ class ToolRegistry:
 
     def get_marketing_efficiency(self, args: Dict[str, Any]) -> Dict[str, Any]:
         opportunities = self.context.opportunities_by_area("marketing")
-        payload: Dict[str, Any] = {
+        order_by = args.get("order_by", "roas")
+        descending = bool(args.get("descending", True))
+        views = self.context.data.get("analysis_views", {})
+        channels = list(views.get("marketing_channels") or [])
+        if order_by not in {"roas", "cac", "investimento", "receita"}:
+            order_by = "roas"
+        channels.sort(key=lambda x: x.get(order_by, 0), reverse=descending)
+        return {
             "area": "marketing",
+            "source_of_truth": "marketing.csv / camada analítica determinística",
+            "metric_definition": {
+                "roas": "receita_gerada_total / investimento_total",
+                "cac": "investimento_total / conversoes_total",
+            },
             "kpis": self.context.kpis["marketing"],
+            "channels": channels,
             "opportunities": opportunities,
-            "available_detail": False,
             "limitations": [
                 "Marketing e vendas não possuem correspondência determinística 1:1 por cliente/pedido.",
+                "Não permite afirmar margem líquida real ou LTV por canal.",
                 "Decisões de orçamento devem ser validadas via teste incremental e retorno marginal.",
             ],
+            "query_parameters": {"order_by": order_by, "descending": descending},
         }
-        views = self.context.data.get("analysis_views", {})
-        channels = views.get("marketing_channels")
-        if channels:
-            payload["available_detail"] = True
-            order = args.get("order_by", "roas")
-            descending = bool(args.get("descending", True))
-            if order in {"roas", "cac", "investimento", "receita"}:
-                payload["channels"] = sorted(
-                    channels,
-                    key=lambda x: x.get(order, 0),
-                    reverse=descending,
-                )
-            else:
-                payload["channels"] = channels
-        return payload
 
     def get_inventory_opportunities(self, args: Dict[str, Any]) -> Dict[str, Any]:
         limit = int(args.get("limit", 10))
         limit = max(1, min(50, limit))
-        payload: Dict[str, Any] = {
+        stockout_order_by = str(args.get("stockout_order_by", "unidades_vendidas"))
+        coverage_order_by = str(args.get("coverage_order_by", "capital_exposicao"))
+        views = self.context.data.get("analysis_views", {})
+
+        stockouts = list(views.get("inventory_stockouts_high_demand") or [])
+        coverage = list(views.get("inventory_high_coverage") or [])
+        categoria = args.get("categoria")
+        sku_id = str(args.get("sku_id", "")).upper() or None
+        if categoria:
+            stockouts = [x for x in stockouts if str(x.get("categoria", "")).lower() == str(categoria).lower()]
+            coverage = [x for x in coverage if str(x.get("categoria", "")).lower() == str(categoria).lower()]
+        if sku_id:
+            stockouts = [x for x in stockouts if str(x.get("sku_id", "")).upper() == sku_id]
+            coverage = [x for x in coverage if str(x.get("sku_id", "")).upper() == sku_id]
+        valid_stock_fields = {"unidades_vendidas", "receita_historica", "margem_historica", "lead_time_reposicao", "receita_potencial_bloqueada_estimada"}
+        valid_coverage_fields = {"capital_exposicao", "cobertura_teorica_dias", "estoque_disponivel", "unidades_vendidas"}
+        if stockout_order_by not in valid_stock_fields:
+            stockout_order_by = "unidades_vendidas"
+        if coverage_order_by not in valid_coverage_fields:
+            coverage_order_by = "capital_exposicao"
+
+        stockouts.sort(key=lambda x: x.get(stockout_order_by, 0), reverse=True)
+        coverage.sort(key=lambda x: x.get(coverage_order_by, 0), reverse=True)
+        return {
             "area": "inventory",
             "kpis": self.context.kpis["estoque"],
             "opportunities": self.context.opportunities_by_area("inventory"),
+            "stockouts_high_demand": stockouts[:limit],
+            "high_coverage": coverage[:limit],
+            "stockout_semantics": {
+                "realized_loss_available_by_sku": False,
+                "preferred_impact_metric": "receita_potencial_bloqueada_estimada",
+                "preferred_impact_label": "receita potencial bloqueada estimada durante o lead time",
+                "historical_fields": ["receita_historica", "margem_historica"],
+                "warning": "Não chamar receita histórica ou margem histórica de prejuízo causado pela ruptura.",
+            },
+            "coverage_semantics": {
+                "is_theoretical": True,
+                "label": "exposição potencial de capital associada ao custo do estoque",
+                "warning": "Não chamar capital_exposicao de capital perdido/parado nem afirmar overstock garantido.",
+            },
+            "query_parameters": {
+                "limit": limit,
+                "stockout_order_by": stockout_order_by,
+                "coverage_order_by": coverage_order_by,
+                "categoria": categoria,
+                "sku_id": sku_id,
+            },
             "limitations": [
                 "Estoque é snapshot; cobertura é teórica e usa histórico de vendas.",
                 "Demanda futura pode variar por sazonalidade e campanhas.",
+                "Ruptura por SKU não possui perda realizada observada; receita potencial bloqueada é uma estimativa durante o lead time.",
             ],
         }
-        views = self.context.data.get("analysis_views", {})
-        if views.get("inventory_stockouts_high_demand"):
-            payload["stockouts_high_demand"] = self.context.limited_view(
-                views["inventory_stockouts_high_demand"], limit=limit
-            )
-        if views.get("inventory_high_coverage"):
-            payload["high_coverage"] = self.context.limited_view(
-                views["inventory_high_coverage"], limit=limit
-            )
-        return payload
 
     def get_support_opportunities(self, args: Dict[str, Any]) -> Dict[str, Any]:
         limit = int(args.get("limit", 10))
         limit = max(1, min(20, limit))
-        payload: Dict[str, Any] = {
+        views = self.context.data.get("analysis_views", {})
+        return {
             "area": "support",
             "kpis": self.context.kpis["atendimento"],
             "opportunities": self.context.opportunities_by_area("support"),
+            "top_customers": self.context.limited_view(views.get("support_top_customers") or [], limit=limit),
             "limitations": [
                 "Concentração de tickets é evidência de concentração de demanda/fricção, não prova de churn individual.",
-                "Risco individual de churn requer classificador/validação posterior de NLP.",
+                "Risco individual de churn requer classificação/validação posterior de NLP.",
             ],
         }
-        views = self.context.data.get("analysis_views", {})
-        if views.get("support_top_customers"):
-            payload["top_customers"] = self.context.limited_view(
-                views["support_top_customers"], limit=limit
-            )
-        return payload
 
     def get_prioritized_opportunities(self, _: Dict[str, Any]) -> Dict[str, Any]:
+        portfolio = []
+        by_id = {o.get("id"): o for o in self.context.opportunities}
+        for item in self.context.prioritized():
+            merged = dict(item)
+            detail = by_id.get(item.get("id"))
+            if detail:
+                for key in ("title", "metric", "evidence", "notes", "limitations", "source"):
+                    if key not in merged and key in detail:
+                        merged[key] = detail[key]
+            portfolio.append(merged)
         return {
-            "portfolio": self.context.prioritized(),
+            "portfolio": portfolio,
             "method": {
                 "type": "MCDA",
                 "weights": {
@@ -132,6 +176,7 @@ class ToolRegistry:
                     "confidence": "multiplicador: high=1.0, medium=0.75, low=0.40",
                 },
                 "authority": "Opportunity Engine da Etapa 1",
+                "ranking_locked": True,
             },
         }
 
@@ -141,67 +186,44 @@ class ToolRegistry:
             raise ValueError("O parâmetro 'id' é obrigatório.")
         opportunity = self.context.opportunity_by_id(str(opportunity_id))
         if not opportunity:
-            return {
-                "found": False,
-                "id": opportunity_id,
-                "message": "Oportunidade não encontrada no contexto estruturado.",
-            }
-        portfolio = next(
-            (x for x in self.context.priority_portfolio if x.get("id") == opportunity_id),
-            None,
-        )
-        return {
-            "found": True,
-            "opportunity": opportunity,
-            "priority": portfolio,
-        }
+            return {"found": False, "id": opportunity_id, "message": "Oportunidade não encontrada no contexto estruturado."}
+        portfolio = next((x for x in self.context.priority_portfolio if x.get("id") == opportunity_id), None)
+        return {"found": True, "opportunity": opportunity, "priority": portfolio}
 
 
+# Mantido para compatibilidade com versões anteriores. O VerticeAgent atual não usa tool-calling do LLM.
 def build_langchain_tools(registry: ToolRegistry) -> List[Any]:
-    """Expose the deterministic registry through LangChain tools for ChatLiteLLM.bind_tools()."""
     from langchain_core.tools import tool
 
     @tool("get_margin_opportunities")
     def get_margin_opportunities() -> str:
-        """Consulta oportunidades, KPIs e evidências validadas da frente de margem."""
-        execution = registry.execute("get_margin_opportunities")
-        return json.dumps(execution.result, ensure_ascii=False)
+        return json.dumps(registry.execute("get_margin_opportunities").result, ensure_ascii=False)
 
     @tool("get_marketing_efficiency")
     def get_marketing_efficiency(
         order_by: Literal["roas", "cac", "investimento", "receita"] = "roas",
         descending: bool = True,
     ) -> str:
-        """Consulta eficiência de aquisição por CAC/ROAS e, quando disponível, a visão estruturada por canal."""
-        execution = registry.execute(
-            "get_marketing_efficiency",
-            {"order_by": order_by, "descending": descending},
+        return json.dumps(
+            registry.execute("get_marketing_efficiency", {"order_by": order_by, "descending": descending}).result,
+            ensure_ascii=False,
         )
-        return json.dumps(execution.result, ensure_ascii=False)
 
     @tool("get_inventory_opportunities")
     def get_inventory_opportunities(limit: int = 10) -> str:
-        """Consulta rupturas de alta demanda e potencial excesso de estoque."""
-        execution = registry.execute("get_inventory_opportunities", {"limit": limit})
-        return json.dumps(execution.result, ensure_ascii=False)
+        return json.dumps(registry.execute("get_inventory_opportunities", {"limit": limit}).result, ensure_ascii=False)
 
     @tool("get_support_opportunities")
     def get_support_opportunities(limit: int = 10) -> str:
-        """Consulta oportunidades de atendimento, incluindo WISMO e concentração de demanda."""
-        execution = registry.execute("get_support_opportunities", {"limit": limit})
-        return json.dumps(execution.result, ensure_ascii=False)
+        return json.dumps(registry.execute("get_support_opportunities", {"limit": limit}).result, ensure_ascii=False)
 
     @tool("get_prioritized_opportunities")
     def get_prioritized_opportunities() -> str:
-        """Retorna o portfólio oficial já priorizado pelo Opportunity Engine da Etapa 1."""
-        execution = registry.execute("get_prioritized_opportunities")
-        return json.dumps(execution.result, ensure_ascii=False)
+        return json.dumps(registry.execute("get_prioritized_opportunities").result, ensure_ascii=False)
 
     @tool("get_opportunity_by_id")
     def get_opportunity_by_id(id: str) -> str:
-        """Retorna detalhes completos e a posição no portfólio de uma oportunidade, como OPP-MAR-01."""
-        execution = registry.execute("get_opportunity_by_id", {"id": id})
-        return json.dumps(execution.result, ensure_ascii=False)
+        return json.dumps(registry.execute("get_opportunity_by_id", {"id": id}).result, ensure_ascii=False)
 
     return [
         get_margin_opportunities,

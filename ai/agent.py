@@ -6,302 +6,331 @@ from typing import Any, Dict, List, Optional
 
 from .context import ContextStore
 from .llm import build_eloagents_llm
-from .prompts import SYSTEM_PROMPT, SYNTHESIS_PROMPT
-from .routing import infer_tool_for_question
-from .tools import ToolRegistry, build_langchain_tools
+from .prompts import SYNTHESIS_PROMPT
+from .routing import AUTHORIZED_TOOLS, infer_tool_arguments, infer_tool_for_followup, infer_tool_for_question
+from .tools import ToolRegistry
 
 
 class VerticeAgent:
-    """Decision Copilot usando ChatLiteLLM/EloAgents e tools determinísticas."""
+    """
+    Router determinístico → Tool determinística → ChatLiteLLM/EloAgents → síntese.
 
-    def __init__(
-        self,
-        context_path: str | Path,
-        *,
-        llm: Optional[Any] = None,
-        model: Optional[str] = None,
-        max_tool_rounds: int = 5,
-    ):
+    O LLM nunca escolhe a ferramenta. Ele recebe somente a evidência produzida pela
+    camada determinística e transforma essa evidência em uma resposta executiva.
+    """
+
+    def __init__(self, context_path: str | Path, *, llm: Optional[Any] = None, model: Optional[str] = None, max_tool_rounds: int = 1):
         self.context = ContextStore(context_path)
         self.registry = ToolRegistry(self.context)
-        self.tools = build_langchain_tools(self.registry)
         self.llm = llm or build_eloagents_llm(model=model)
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
         self.max_tool_rounds = max(1, max_tool_rounds)
         self.audit_log: List[Dict[str, Any]] = []
 
-    def ask(self, question: str) -> str:
-        """Executa uma pergunta e mantém a síntese desacoplada do protocolo de tools.
+    def _log(self, *, question: str, round_idx: int, tool_name: Optional[str], arguments: Dict[str, Any], payload: Any, status: str) -> None:
+        self.audit_log.append({
+            "question": question,
+            "round": round_idx,
+            "tool": tool_name,
+            "arguments": arguments,
+            "payload": payload,
+            "status": status,
+        })
 
-        O EloAgents/Gemini pode retornar chamadas de tools externas ao contrato local
-        ou múltiplos function calls. Nunca reenviamos esse AIMessage para a etapa de
-        síntese com ToolMessages parciais, pois isso quebra o contrato de Chat
-        Completions (o número de function responses deve corresponder aos calls).
-        Em vez disso, a síntese recebe um pacote textual estruturado com os resultados
-        determinísticos efetivamente executados.
-        """
+    def _route(self, question: str, conversation: List[Dict[str, Any]]) -> Optional[str]:
+        explicit = infer_tool_for_question(question)
+        if explicit:
+            return explicit
+        return infer_tool_for_followup(question, conversation)
+
+    def _infer_followup_tool(self, question: str, conversation: List[Dict[str, Any]]) -> Optional[str]:
+        """Compatibilidade com a API das versões anteriores."""
+        return infer_tool_for_followup(question, conversation)
+
+    def _execute_tool(self, tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Compatibilidade e ponto único de execução determinística."""
+        execution = self.registry.execute(tool_name, arguments or {})
+        self._log(
+            question=getattr(self, "_current_question", ""),
+            round_idx=1,
+            tool_name=tool_name,
+            arguments=execution.arguments,
+            payload=execution.result,
+            status="tool_executed",
+        )
+        return {
+            "tool": execution.name,
+            "arguments": execution.arguments,
+            "result": execution.result,
+            "execution_mode": "deterministic_router",
+        }
+
+    def ask(self, question: str, conversation: Optional[List[Dict[str, Any]]] = None) -> str:
         if not question.strip():
             raise ValueError("A pergunta não pode ser vazia.")
 
-        try:
-            from langchain_core.messages import HumanMessage, SystemMessage
-        except ImportError as exc:
-            raise RuntimeError(
-                "Dependências LangChain ausentes. Execute: pip install -r requirements.txt"
-            ) from exc
+        conversation = conversation or []
+        self._current_question = question
+        selected_tool = self._route(question, conversation)
+        arguments = infer_tool_arguments(question, selected_tool)
 
-        available_tools = self.registry.names()
-        forced_tool = infer_tool_for_question(question)
-
-        if forced_tool:
-            tool_obj = next(t for t in self.tools if t.name == forced_tool)
-            first_llm = self._bind_forced_tool(tool_obj, forced_tool)
-        else:
-            first_llm = self.llm_with_tools
-
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=question),
-        ]
-
-        executed_results: List[Dict[str, Any]] = []
-        tool_calls = []
-
-        try:
-            response = first_llm.invoke(messages)
-        except Exception as exc:
-            self._log(
-                question=question,
-                round_idx=1,
-                tool_name=None,
-                arguments={},
-                payload={"error": type(exc).__name__, "message": str(exc)},
-                status="llm_error",
-            )
-            raise RuntimeError(
-                "Falha ao consultar o EloAgents. Verifique a chave, o modelo e o endpoint. "
-                f"Detalhe: {exc}"
-            ) from exc
-
-        tool_calls = getattr(response, "tool_calls", None) or []
-
-        for call in tool_calls:
-            name = call.get("name")
-            arguments = call.get("args") or {}
-
-            if not name:
-                self._log(
-                    question=question,
-                    round_idx=1,
-                    tool_name=None,
-                    arguments=arguments,
-                    payload={"raw_call": call},
-                    status="invalid_tool_call",
-                )
-                continue
-
-            if name not in available_tools:
-                payload = {
-                    "error": f"Tool '{name}' não está disponível neste agente.",
-                    "available_tools": available_tools,
-                    "required_tool": forced_tool,
-                }
-                self._log(
-                    question=question,
-                    round_idx=1,
-                    tool_name=name,
-                    arguments=arguments,
-                    payload=payload,
-                    status="unknown_tool",
-                )
-                continue
-
-            if forced_tool and name != forced_tool:
-                payload = {
-                    "error": f"Tool '{name}' foi rejeitada pela guarda de intenção.",
-                    "required_tool": forced_tool,
-                }
-                self._log(
-                    question=question,
-                    round_idx=1,
-                    tool_name=name,
-                    arguments=arguments,
-                    payload=payload,
-                    status="guardrail_rejected_tool",
-                )
-                continue
-
-            try:
-                execution = self.registry.execute(name, arguments)
-            except Exception as exc:
-                payload = {"error": type(exc).__name__, "message": str(exc)}
-                self._log(
-                    question=question,
-                    round_idx=1,
-                    tool_name=name,
-                    arguments=arguments,
-                    payload=payload,
-                    status="tool_error",
-                )
-                continue
-
-            executed_results.append(
-                {
-                    "tool": execution.name,
-                    "arguments": execution.arguments,
-                    "result": execution.result,
-                    "execution_mode": "llm_tool_call",
-                }
-            )
-            self._log(
-                question=question,
-                round_idx=1,
-                tool_name=name,
-                arguments=arguments,
-                payload=execution.result,
-                status="tool_executed",
-            )
-
-        # Fallback determinístico para intents canônicos quando o proxy/modelo
-        # não produziu o Tool Call autorizado. O resultado é enviado à síntese
-        # como contexto estruturado, não como ToolMessage, evitando o erro 400
-        # de function-response/function-call mismatch do endpoint Gemini.
-        if forced_tool and not any(item["tool"] == forced_tool for item in executed_results):
-            execution = self.registry.execute(forced_tool, {})
-            executed_results.append(
-                {
-                    "tool": execution.name,
-                    "arguments": execution.arguments,
-                    "result": execution.result,
-                    "execution_mode": "deterministic_fallback",
-                }
-            )
-            self._log(
-                question=question,
-                round_idx=1,
-                tool_name=forced_tool,
-                arguments={},
-                payload=execution.result,
-                status="tool_executed_fallback",
-            )
-
-        if not executed_results:
-            # Pergunta realmente ambígua e sem Tool Call.
-            answer = self._message_text(response)
+        if not selected_tool:
+            answer = self._scope_answer(question)
             self._log(
                 question=question,
                 round_idx=1,
                 tool_name=None,
                 arguments={},
                 payload={"final_answer": answer},
-                status="final",
+                status="unrouted_final",
             )
             return answer
 
-        # Síntese independente do protocolo de function calling.
-        # Não reutilizamos o AIMessage que pode conter calls externos/ignorado(s).
-        evidence_packet = json.dumps(
-            {
-                "question": question,
-                "authorized_tools": available_tools,
-                "required_tool": forced_tool,
-                "executed_tools": executed_results,
+        try:
+            executed_item = self._execute_tool(selected_tool, arguments)
+            execution_result = executed_item["result"]
+        except Exception as exc:
+            self._log(
+                question=question,
+                round_idx=1,
+                tool_name=selected_tool,
+                arguments=arguments,
+                payload={"error": type(exc).__name__, "message": str(exc)},
+                status="tool_error",
+            )
+            raise RuntimeError(f"Falha ao executar a ferramenta {selected_tool}: {exc}") from exc
+
+        executed_results = [executed_item]
+
+        answer = self._synthesize(question, conversation, selected_tool, executed_results, retry=False)
+        if self._needs_retry(answer):
+            retry_answer = self._synthesize(question, conversation, selected_tool, executed_results, retry=True)
+            if retry_answer.strip():
+                answer = retry_answer
+
+        if not answer.strip() or self._needs_retry(answer):
+            answer = self._deterministic_fallback_answer(
+                question=question,
+                selected_tool=selected_tool,
+                executed_results=executed_results,
+                conversation=conversation,
+            )
+
+        self._log(
+            question=question,
+            round_idx=3,
+            tool_name=selected_tool,
+            arguments={},
+            payload={
+                "final_answer": answer,
+                "tools_used": [selected_tool],
+                "execution_modes": ["deterministic_router"],
             },
-            ensure_ascii=False,
-            indent=2,
+            status="final",
         )
+        return answer
+
+    def _synthesize(self, question: str, conversation: List[Dict[str, Any]], selected_tool: str, executed_results: List[Dict[str, Any]], retry: bool) -> str:
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+        except ImportError as exc:
+            raise RuntimeError("Dependências LangChain ausentes. Execute: pip install -r requirements.txt") from exc
+
+        packet = {
+            "question": question,
+            "selected_tool": selected_tool,
+            "conversation_context": self._compact_conversation_context(conversation),
+            "executed_tools": executed_results,
+            "authorized_modules": list(AUTHORIZED_TOOLS),
+        }
+        instructions = (
+            "Responda diretamente ao pedido atual. Use somente os dados estruturados. "
+            "Não introduza nenhum número que não esteja no pacote de evidências. "
+            "Não faça perguntas de continuidade ao final."
+        )
+        if retry:
+            instructions += (
+                "\n\nESTA É UMA SEGUNDA TENTATIVA. A resposta anterior foi considerada genérica ou vazia. "
+                "Entregue uma resposta concreta em 2–5 bullets, citando os IDs de oportunidade ou SKUs "
+                "presentes nos dados quando isso atender ao pedido."
+            )
 
         try:
             synthesis = self.llm.invoke([
                 SystemMessage(content=SYNTHESIS_PROMPT),
                 HumanMessage(
                     content=(
-                        "PERGUNTA DA DIRETORIA:\n"
-                        f"{question}\n\n"
-                        "RESULTADOS DETERMINÍSTICOS DAS TOOLS AUTORIZADAS:\n"
-                        f"{evidence_packet}"
+                        "DADOS ESTRUTURADOS — FONTE FACTUAL ÚNICA:\n"
+                        + json.dumps(packet, ensure_ascii=False, indent=2)
+                        + "\n\nINSTRUÇÃO DE SÍNTESE:\n"
+                        + instructions
                     )
                 ),
             ])
+            answer = self._message_text(synthesis)
+            self._log(
+                question=question,
+                round_idx=3 if retry else 2,
+                tool_name=None,
+                arguments={},
+                payload={"answer_preview": answer[:2000], "retry": retry},
+                status="llm_synthesis_retry" if retry else "llm_synthesis",
+            )
+            return answer
         except Exception as exc:
             self._log(
                 question=question,
-                round_idx=2,
+                round_idx=3 if retry else 2,
                 tool_name=None,
                 arguments={},
-                payload={"error": type(exc).__name__, "message": str(exc)},
+                payload={"error": type(exc).__name__, "message": str(exc), "retry": retry},
                 status="llm_synthesis_error",
             )
-            raise RuntimeError(f"Falha ao sintetizar resposta: {exc}") from exc
+            return ""
 
-        answer = self._message_text(synthesis)
-        self._log(
-            question=question,
-            round_idx=2,
-            tool_name=None,
-            arguments={},
-            payload={
-                "final_answer": answer,
-                "tools_used": [item["tool"] for item in executed_results],
-                "execution_modes": [item["execution_mode"] for item in executed_results],
-            },
-            status="final",
+    @staticmethod
+    def _needs_retry(answer: str) -> bool:
+        normalized = " ".join((answer or "").lower().split())
+        if not normalized:
+            return True
+        generic_markers = (
+            "resposta baseada nos resultados determinísticos disponíveis",
+            "resposta baseada nos resultados determinísticos das ferramentas autorizadas",
+            "módulo consultado: nenhum",
+            "pergunta: sim, gostaria",
         )
-        return answer
+        return any(marker in normalized for marker in generic_markers)
 
-    def _bind_forced_tool(self, tool_obj: Any, tool_name: str) -> Any:
-        """Try the most specific tool_choice forms supported by the installed stack."""
-        attempts = [
-            {"tool_choice": tool_name},
-            {"tool_choice": "required"},
-        ]
-        for kwargs in attempts:
-            try:
-                return self.llm.bind_tools([tool_obj], **kwargs)
-            except Exception:
-                continue
-        return self.llm.bind_tools([tool_obj])
+    @staticmethod
+    def _compact_conversation_context(conversation: List[Dict[str, Any]], max_turns: int = 4, max_answer_chars: int = 6000) -> List[Dict[str, Any]]:
+        compact: List[Dict[str, Any]] = []
+        for turn in conversation[-max_turns:]:
+            answer = str(turn.get("answer", turn.get("content", "")))
+            if len(answer) > max_answer_chars:
+                answer = answer[:max_answer_chars] + "\n[resposta anterior truncada]"
+            compact.append({
+                "question": str(turn.get("question", "")),
+                "answer": answer,
+                "tools_used": list(turn.get("tools_used") or []),
+            })
+        return compact
+
+    @staticmethod
+    def _scope_answer(question: str) -> str:
+        return (
+            "Essa pergunta está fora do escopo factual do Vértice Intelligence. "
+            "O Copilot atual responde sobre margem, devoluções, marketing e aquisição, "
+            "estoque, atendimento e priorização de oportunidades com base nos dados do case."
+        )
+
+    @staticmethod
+    def _deterministic_fallback_answer(
+        question: str,
+        executed_results: List[Dict[str, Any]],
+        selected_tool: Optional[str] = None,
+        conversation: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
+        result = executed_results[0].get("result") or {}
+        lines = ["Resposta baseada nos resultados determinísticos disponíveis.", ""]
+
+        if selected_tool == "get_marketing_efficiency":
+            channels = result.get("channels") or []
+            if channels:
+                lines += ["**Eficiência de aquisição**", ""]
+                for c in channels[:5]:
+                    lines.append(f"- {c.get('canal')}: ROAS {c.get('roas', 0):.2f}x | CAC R$ {c.get('cac', 0):.2f}")
+                lines.append("")
+                lines.append("A decisão de verba deve ser validada por testes incrementais e retorno marginal; os valores são da base de marketing.")
+                return "\n".join(lines)
+
+        if selected_tool == "get_inventory_opportunities":
+            stockouts = result.get("stockouts_high_demand") or []
+            coverage = result.get("high_coverage") or []
+            q_lower = question.lower()
+            inventory_query = any(marker in q_lower for marker in (
+                "ruptura", "sku", "item", "itens", "produto", "produtos",
+                "beleza", "moda", "lifestyle", "acessórios", "acessorios"
+            ))
+            if stockouts and inventory_query:
+                order_by = (result.get("query_parameters") or {}).get("stockout_order_by")
+                if order_by == "receita_potencial_bloqueada_estimada":
+                    lines += ["**Rupturas com maior receita potencial bloqueada estimada**", ""]
+                    for item in stockouts[:5]:
+                        lines.append(
+                            f"- {item.get('sku_id')} — {item.get('nome_produto')}: "
+                            f"receita potencial bloqueada estimada R$ {item.get('receita_potencial_bloqueada_estimada', 0):,.2f}; "
+                            f"lead time {item.get('lead_time_reposicao')} dias"
+                        )
+                    lines.append("\nA base não mede prejuízo realizado por SKU; este valor é uma estimativa baseada na demanda histórica e no lead time.")
+                    return "\n".join(lines)
+                lines += ["**SKUs de ruptura em maior volume de vendas histórico**", ""]
+                for item in stockouts[:5]:
+                    lines.append(f"- {item.get('sku_id')} — {item.get('nome_produto')}: {item.get('unidades_vendidas')} un.; receita histórica R$ {item.get('receita_historica', 0):,.2f}")
+                return "\n".join(lines)
+            if coverage:
+                lines += ["**Exposição de estoque**", ""]
+                for item in coverage[:5]:
+                    lines.append(f"- {item.get('sku_id')} — {item.get('nome_produto')}: {item.get('cobertura_teorica_dias', 0):,.0f} dias teóricos; exposição potencial R$ {item.get('capital_exposicao', 0):,.2f}")
+                lines.append("")
+                lines.append("Ação sugerida: congelar novas compras e testar estratégias de escoamento, respeitando a natureza teórica da cobertura.")
+                return "\n".join(lines)
+
+        if not selected_tool and executed_results:
+            selected_tool = str(executed_results[0].get("tool") or "") or None
+
+        if selected_tool == "get_prioritized_opportunities":
+            portfolio = result.get("portfolio") or []
+            lines += ["**Portfólio priorizado**", ""]
+            for item in portfolio[:7]:
+                lines.append(
+                    f"- #{item.get('rank')} — **{item.get('id')} — {item.get('oportunidade') or item.get('title')}** "
+                    f"({item.get('area')}, score {item.get('score')})"
+                )
+            return "\n".join(lines)
+
+        opportunities = result.get("opportunities") if isinstance(result, dict) else None
+        if isinstance(opportunities, list):
+            lines.append(f"**Módulo consultado:** {selected_tool}")
+            for opportunity in opportunities[:5]:
+                title = opportunity.get("title") or opportunity.get("id") or "Oportunidade"
+                opp_id = opportunity.get("id")
+                note = opportunity.get("notes")
+                impact_type = opportunity.get("impact_type")
+                suffix = f" — {impact_type}" if impact_type else ""
+                lines.append(f"- **{opp_id} — {title}**{suffix}")
+                if note:
+                    lines.append(f"  Ação sugerida: {note}")
+            return "\n".join(lines)
+
+        lines.append(f"**Módulo consultado:** {selected_tool}")
+        return "\n".join(lines)
 
     @staticmethod
     def _message_text(message: Any) -> str:
-        content = getattr(message, "content", "")
+        content = getattr(message, "content", None)
+        if content is None:
+            content = getattr(message, "text", "")
         if isinstance(content, str):
-            return content
+            return content.strip()
+        if isinstance(content, dict):
+            for key in ("text", "content", "value", "output"):
+                value = content.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            return str(content)
         if isinstance(content, list):
             parts: List[str] = []
             for item in content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    parts.append(str(item.get("text", "")))
-                elif isinstance(item, str):
+                if isinstance(item, str):
                     parts.append(item)
-            return "\n".join(part for part in parts if part).strip()
-        return str(content)
-
-    def _log(
-        self,
-        *,
-        question: str,
-        round_idx: int,
-        tool_name: Optional[str],
-        arguments: Dict[str, Any],
-        payload: Any,
-        status: str,
-    ) -> None:
-        self.audit_log.append(
-            {
-                "question": question,
-                "round": round_idx,
-                "tool": tool_name,
-                "arguments": arguments,
-                "payload": payload,
-                "status": status,
-            }
-        )
-
-    def save_audit(self, path: str | Path) -> None:
-        p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(
-            json.dumps(self.audit_log, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+                elif isinstance(item, dict):
+                    for key in ("text", "content", "value"):
+                        value = item.get(key)
+                        if isinstance(value, str) and value.strip():
+                            parts.append(value)
+                            break
+                else:
+                    value = getattr(item, "text", None)
+                    if isinstance(value, str) and value.strip():
+                        parts.append(value)
+            return "\n".join(parts).strip()
+        return str(content or "").strip()
