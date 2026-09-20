@@ -26,6 +26,8 @@ class ToolRegistry:
             "get_support_opportunities": self.get_support_opportunities,
             "get_prioritized_opportunities": self.get_prioritized_opportunities,
             "get_opportunity_by_id": self.get_opportunity_by_id,
+            "get_product_details": self.get_product_details,
+            "get_product_ranking": self.get_product_ranking,
         }
 
     def execute(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> ToolExecution:
@@ -153,6 +155,92 @@ class ToolRegistry:
             ],
         }
 
+
+    def get_product_details(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        query = str(args.get("query") or "").strip()
+        sku_id = args.get("sku_id")
+        product = self.context.product_by_sku(str(sku_id)) if sku_id else None
+        matches = [product] if product else self.context.find_products(query, limit=5)
+
+        if not matches:
+            return {
+                "found": False,
+                "area": "product",
+                "query": query,
+                "message": "Produto ou SKU não encontrado no contexto estruturado de produtos.",
+                "source_of_truth": self.context.product_analytics.get("source"),
+            }
+
+        product = matches[0]
+        return {
+            "found": True,
+            "area": "product",
+            "source_of_truth": self.context.product_analytics.get("source"),
+            "product": product,
+            "rankings": {
+                "rentabilidade": product.get("rank_rentabilidade"),
+                "faturamento": product.get("rank_faturamento"),
+                "margem": product.get("rank_margem"),
+                "unidades": product.get("rank_unidades"),
+            },
+            "metric_definitions": {
+                "faturamento": "soma da receita líquida do SKU",
+                "margem": "soma da margem de contribuição do SKU",
+                "rentabilidade": "margem / receita bruta do SKU",
+                "unidades": "soma da quantidade vendida do SKU",
+            },
+            "inventory_note": "Estoque e atributos de estoque vêm de estoque.csv e representam um snapshot; não são parte do cálculo da rentabilidade histórica.",
+            "limitations": [
+                "Rentabilidade é uma métrica histórica agregada sobre as vendas observadas; não mede demanda futura ou causalidade de marketing.",
+                "A posição no ranking é relativa à população de SKUs com receita_bruta > 0 no contexto estruturado.",
+                "Estoque é snapshot e deve ser interpretado separadamente da janela histórica de vendas.",
+            ],
+            "query_parameters": {"query": query, "sku_id": sku_id},
+        }
+
+    def get_product_ranking(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        order_by = str(args.get("order_by", "rentabilidade"))
+        descending = bool(args.get("descending", True))
+        limit = int(args.get("limit", 10))
+        limit = max(1, min(50, limit))
+        valid = {"rentabilidade", "faturamento", "margem", "unidades"}
+        if order_by not in valid:
+            order_by = "rentabilidade"
+        products = list(self.context.products)
+        products.sort(
+            key=lambda x: (x.get(order_by, float("-inf")), x.get("faturamento", float("-inf"))),
+            reverse=descending,
+        )
+        ranking = []
+        for position, product in enumerate(products[:limit], start=1):
+            ranking.append({
+                "posicao_consulta": position,
+                "sku_id": product.get("sku_id"),
+                "produto": product.get("produto"),
+                "faturamento": product.get("faturamento"),
+                "margem": product.get("margem"),
+                "receita_bruta": product.get("receita_bruta"),
+                "unidades": product.get("unidades"),
+                "rentabilidade": product.get("rentabilidade"),
+                "rank_rentabilidade": product.get("rank_rentabilidade"),
+            })
+        return {
+            "area": "product",
+            "source_of_truth": self.context.product_analytics.get("source"),
+            "population_definition": self.context.product_analytics.get("population_definition"),
+            "metric_definition": self.context.product_analytics.get("sales_aggregation"),
+            "ranking": ranking,
+            "query_parameters": {
+                "order_by": order_by,
+                "descending": descending,
+                "limit": limit,
+            },
+            "limitations": [
+                "Ranking de rentabilidade é histórico e descritivo; não representa previsão de vendas futuras.",
+                "Em empate, a ordenação usa faturamento como desempate para manter determinismo.",
+            ],
+        }
+
     def get_prioritized_opportunities(self, _: Dict[str, Any]) -> Dict[str, Any]:
         portfolio = []
         by_id = {o.get("id"): o for o in self.context.opportunities}
@@ -225,6 +313,27 @@ def build_langchain_tools(registry: ToolRegistry) -> List[Any]:
     def get_opportunity_by_id(id: str) -> str:
         return json.dumps(registry.execute("get_opportunity_by_id", {"id": id}).result, ensure_ascii=False)
 
+    @tool("get_product_details")
+    def get_product_details(query: str, sku_id: str = "") -> str:
+        return json.dumps(
+            registry.execute("get_product_details", {"query": query, "sku_id": sku_id or None}).result,
+            ensure_ascii=False,
+        )
+
+    @tool("get_product_ranking")
+    def get_product_ranking(
+        order_by: Literal["rentabilidade", "faturamento", "margem", "unidades"] = "rentabilidade",
+        descending: bool = True,
+        limit: int = 10,
+    ) -> str:
+        return json.dumps(
+            registry.execute(
+                "get_product_ranking",
+                {"order_by": order_by, "descending": descending, "limit": limit},
+            ).result,
+            ensure_ascii=False,
+        )
+
     return [
         get_margin_opportunities,
         get_marketing_efficiency,
@@ -232,4 +341,6 @@ def build_langchain_tools(registry: ToolRegistry) -> List[Any]:
         get_support_opportunities,
         get_prioritized_opportunities,
         get_opportunity_by_id,
+        get_product_details,
+        get_product_ranking,
     ]

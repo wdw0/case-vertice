@@ -10,6 +10,8 @@ AUTHORIZED_TOOLS = (
     "get_support_opportunities",
     "get_prioritized_opportunities",
     "get_opportunity_by_id",
+    "get_product_details",
+    "get_product_ranking",
 )
 
 ROUTES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
@@ -27,7 +29,7 @@ ROUTES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             "visao geral", "problemas em geral", "outras frentes",
         ),
     ),
-    # Inventory comes before margin so stock queries are kept in the inventory domain.
+    # Inventory comes before product queries so category/rupture/coverage questions stay in inventory.
     (
         "get_inventory_opportunities",
         (
@@ -40,6 +42,27 @@ ROUTES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             "itens de lifestyle", "produtos de lifestyle",
             "itens de acessórios", "itens de acessorios", "produtos de acessórios", "produtos de acessorios",
             "perda de estoque", "prejuízo de estoque", "prejuizo de estoque",
+        ),
+    ),
+    (
+        "get_product_ranking",
+        (
+            "ranking de produto", "ranking de produtos", "ranking por rentabilidade",
+            "lista de produtos ordenados", "produtos ordenados", "mais rentáveis",
+            "mais rentaveis", "maiores margens por produto", "maior margem por produto",
+            "maior faturamento por produto", "mais vendidos por produto",
+            "primeiro lugar na lista de produtos", "primeiro produto por rentabilidade",
+            "primeiro lugar por rentabilidade", "qual produto", "qual é o produto",
+            "produto com maior", "produto com menor", "top produtos", "top 5 produtos",
+            "top 10 produtos", "ranking de skus", "ranking de sku",
+        ),
+    ),
+    (
+        "get_product_details",
+        (
+            "detalhes do produto", "dados do produto", "ficha do produto",
+            "detalhes do sku", "dados do sku", "ficha do sku",
+            "consultar sku", "informações do sku", "informacoes do sku",
         ),
     ),
     (
@@ -68,6 +91,15 @@ ROUTES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
 
 def infer_tool_for_question(question: str) -> Optional[str]:
     q = " ".join(question.lower().strip().split())
+
+    # A consulta explícita por SKU individual deve ser tratada como produto,
+    # exceto quando houver um termo inequívoco de estoque/ruptura.
+    if re.search(r"\bsku[- ]?\d{4,5}\b", q, re.IGNORECASE):
+        inventory_terms = ("estoque", "ruptura", "cobertura", "reposição", "reposicao", "overstock")
+        if not any(term in q for term in inventory_terms):
+            return "get_product_details"
+
+    # Ranking tem precedência sobre a palavra genérica "produto".
     for tool_name, keywords in ROUTES:
         if any(keyword in q for keyword in keywords):
             return tool_name
@@ -105,7 +137,10 @@ def infer_tool_for_followup(
 
 
 def _extract_limit(question: str, default: int = 10, maximum: int = 50) -> int:
-    match = re.search(r"\b(\d{1,2})\s+(?:skus?|itens?|produtos?)\b", question.lower())
+    q = question.lower()
+    if re.search(r"(?:\b1\s*[ºo°]|\bprimeiro\b)", q):
+        return 1
+    match = re.search(r"\b(\d{1,2})\s+(?:skus?|itens?|produtos?)\b", q)
     if not match:
         return default
     return max(1, min(maximum, int(match.group(1))))
@@ -135,6 +170,29 @@ def infer_tool_arguments(question: str, tool_name: Optional[str]) -> Dict[str, A
             return {"order_by": "receita", "descending": True}
         return {"order_by": "roas", "descending": True}
 
+    if tool_name == "get_product_ranking":
+        order_by = "rentabilidade"
+        if "faturamento" in q or "receita" in q:
+            order_by = "faturamento"
+        elif "margem" in q:
+            order_by = "margem"
+        elif "unidades" in q or "mais vendidos" in q or "maior volume" in q:
+            order_by = "unidades"
+
+        descending = not any(marker in q for marker in ("menor", "último", "ultimo", "piores", "bottom"))
+        return {
+            "order_by": order_by,
+            "descending": descending,
+            "limit": _extract_limit(q, default=10, maximum=50),
+        }
+
+    if tool_name == "get_product_details":
+        sku_match = re.search(r"\bSKU[- ]?\d{4,5}\b", q, re.IGNORECASE)
+        args: Dict[str, Any] = {"query": question}
+        if sku_match:
+            args["sku_id"] = sku_match.group(0).upper().replace(" ", "-")
+        return args
+
     if tool_name == "get_inventory_opportunities":
         args: Dict[str, Any] = {"limit": _extract_limit(q)}
         sku_match = re.search(r"\bSKU[- ]?\d{4,5}\b", q, re.IGNORECASE)
@@ -145,8 +203,6 @@ def infer_tool_arguments(question: str, tool_name: Optional[str]) -> Dict[str, A
                 args["categoria"] = "Acessórios" if category in {"acessórios", "acessorios"} else category.title()
                 break
         if "prejuízo" in q or "prejuizo" in q or "perda" in q or "impacto financeiro" in q:
-            # A base não observa prejuízo realizado por SKU em ruptura.
-            # Ordenamos pela receita potencial bloqueada estimada durante o lead time.
             args["stockout_order_by"] = "receita_potencial_bloqueada_estimada"
             args["coverage_order_by"] = "capital_exposicao"
         elif "maior margem" in q or "margem histórica" in q or "margem historica" in q:

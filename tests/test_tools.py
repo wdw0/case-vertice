@@ -15,6 +15,8 @@ def test_registry_tool_names():
         "get_support_opportunities",
         "get_prioritized_opportunities",
         "get_opportunity_by_id",
+        "get_product_details",
+        "get_product_ranking",
     ]
 
 
@@ -50,3 +52,26 @@ def test_inventory_semantics_are_explicit():
     assert "receita_potencial_bloqueada_estimada" in result["stockouts_high_demand"][0]
     assert result["coverage_semantics"]["is_theoretical"] is True
 
+
+
+def test_product_detail_resolves_name_and_rankings():
+    registry = ToolRegistry(ContextStore(CONTEXT))
+    result = registry.execute(
+        "get_product_details",
+        {"query": "O que vc tem a dizer sobre o item Calça Jeans Moderno Nude"},
+    ).result
+    assert result["found"] is True
+    assert result["product"]["sku_id"] == "SKU-04174"
+    assert result["product"]["rank_rentabilidade"] == 1
+    assert result["product"]["rentabilidade"] > 0.67
+
+
+def test_product_ranking_returns_rentability_leader():
+    registry = ToolRegistry(ContextStore(CONTEXT))
+    result = registry.execute(
+        "get_product_ranking",
+        {"order_by": "rentabilidade", "descending": True, "limit": 3},
+    ).result
+    assert result["ranking"][0]["sku_id"] == "SKU-04174"
+    assert result["ranking"][0]["produto"] == "Calça Jeans Moderno Nude"
+    assert round(result["ranking"][0]["rentabilidade"] * 100, 2) == 67.79

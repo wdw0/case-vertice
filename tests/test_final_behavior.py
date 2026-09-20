@@ -81,3 +81,29 @@ def test_inventory_category_loss_query_routes_to_potential_blocked_revenue():
     assert args["categoria"] == "Beleza"
     assert args["stockout_order_by"] == "receita_potencial_bloqueada_estimada"
 
+
+
+def test_product_router_resolves_named_product():
+    question = "O que vc tem a dizer sobre o item Calça Jeans Moderno Nude"
+    tool = infer_tool_for_question(question)
+    # A função pura não conhece o catálogo; a detecção por entidade ocorre no Agent.
+    assert tool is None
+
+
+def test_product_ranking_router_is_deterministic():
+    question = "qual é o 1º lugar na lista de produtos ordenados por rentabilidade"
+    assert infer_tool_for_question(question) == "get_product_ranking"
+    assert infer_tool_arguments(question, "get_product_ranking") == {
+        "order_by": "rentabilidade",
+        "descending": True,
+        "limit": 1,
+    }
+
+
+def test_product_query_agent_routes_by_catalog_entity():
+    class NoopLLM:
+        def invoke(self, messages):
+            return type("Msg", (), {"content": "produto consultado"})()
+
+    agent = VerticeAgent("data/vertice_ai_context.json", llm=NoopLLM())
+    assert agent._route("O que vc tem a dizer sobre o item Calça Jeans Moderno Nude", []) == "get_product_details"

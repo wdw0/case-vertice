@@ -40,6 +40,13 @@ class VerticeAgent:
         explicit = infer_tool_for_question(question)
         if explicit:
             return explicit
+
+        # Nomes de produtos não precisam conter uma palavra-chave de domínio.
+        # A existência do nome/SKU no catálogo auditado é suficiente para classificar
+        # a pergunta como consulta de produto.
+        if self.context.find_products(question, limit=1):
+            return "get_product_details"
+
         return infer_tool_for_followup(question, conversation)
 
     def _infer_followup_tool(self, question: str, conversation: List[Dict[str, Any]]) -> Optional[str]:
@@ -219,7 +226,7 @@ class VerticeAgent:
         return (
             "Essa pergunta está fora do escopo factual do Vértice Intelligence. "
             "O Copilot atual responde sobre margem, devoluções, marketing e aquisição, "
-            "estoque, atendimento e priorização de oportunidades com base nos dados do case."
+            "estoque, atendimento, produtos e priorização de oportunidades com base nos dados do case."
         )
 
     @staticmethod
@@ -276,6 +283,51 @@ class VerticeAgent:
 
         if not selected_tool and executed_results:
             selected_tool = str(executed_results[0].get("tool") or "") or None
+
+        if selected_tool == "get_product_details":
+            if not result.get("found"):
+                return (
+                    "Não encontrei esse produto ou SKU no contexto estruturado de produtos. "
+                    "A consulta aceita o nome do produto ou um SKU presente na base do case."
+                )
+            product = result.get("product") or {}
+            rankings = result.get("rankings") or {}
+            lines += [f"**{product.get('produto')} ({product.get('sku_id')})**", ""]
+            lines.append(f"- Rentabilidade: {float(product.get('rentabilidade', 0)) * 100:.2f}%")
+            lines.append(f"- Faturamento: R$ {float(product.get('faturamento', 0)):,.2f}")
+            lines.append(f"- Margem de contribuição: R$ {float(product.get('margem', 0)):,.2f}")
+            lines.append(f"- Unidades vendidas: {product.get('unidades')}")
+            if rankings.get("rentabilidade") is not None:
+                lines.append(f"- Posição por rentabilidade: {rankings.get('rentabilidade')}º")
+            if product.get("estoque_disponivel") is not None:
+                lines.append(f"- Estoque disponível no snapshot: {product.get('estoque_disponivel')}")
+            lines.append("")
+            lines.append("A rentabilidade e os rankings são históricos e descritivos; o estoque é um snapshot separado da janela de vendas.")
+            return "\n".join(lines)
+
+        if selected_tool == "get_product_ranking":
+            ranking = result.get("ranking") or []
+            params = result.get("query_parameters") or {}
+            if not ranking:
+                return "Não há produtos disponíveis para o ranking no contexto estruturado."
+            metric_labels = {
+                "rentabilidade": "rentabilidade",
+                "faturamento": "faturamento",
+                "margem": "margem de contribuição",
+                "unidades": "unidades vendidas",
+            }
+            metric = metric_labels.get(params.get("order_by"), params.get("order_by"))
+            lines += [f"**Ranking de produtos por {metric}**", ""]
+            for item in ranking:
+                if params.get("order_by") == "rentabilidade":
+                    value = f"{float(item.get('rentabilidade', 0)) * 100:.2f}%"
+                elif params.get("order_by") in {"faturamento", "margem"}:
+                    key = params.get("order_by")
+                    value = f"R$ {float(item.get(key, 0)):,.2f}"
+                else:
+                    value = f"{item.get('unidades')} un."
+                lines.append(f"- {item.get('posicao_consulta')}º — {item.get('produto')} ({item.get('sku_id')}): {value}")
+            return "\n".join(lines)
 
         if selected_tool == "get_prioritized_opportunities":
             portfolio = result.get("portfolio") or []
