@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional
 
+import pandas as pd
+
 from .context import ContextStore
 
 
@@ -28,6 +30,8 @@ class ToolRegistry:
             "get_opportunity_by_id": self.get_opportunity_by_id,
             "get_product_details": self.get_product_details,
             "get_product_ranking": self.get_product_ranking,
+            "get_channel_margin": self.get_channel_margin,
+            "get_break_even_point": self.get_break_even_point,
         }
 
     def execute(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> ToolExecution:
@@ -241,6 +245,248 @@ class ToolRegistry:
             ],
         }
 
+    def get_channel_margin(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Abertura transacional por canal usando diretamente vendas.csv aprovado."""
+        try:
+            vendas, source = self.context.sales_approved(), self.context.sales_source
+        except (FileNotFoundError, ValueError) as exc:
+            return {
+                "found": False,
+                "area": "channel_economics",
+                "source": "Data Room/vendas.csv",
+                "status": "data_source_unavailable",
+                "message": str(exc),
+                "dashboard_used": False,
+            }
+
+        if "canal" not in vendas.columns:
+            vendas["canal"] = "Sem canal"
+        vendas["canal"] = vendas["canal"].fillna("Sem canal").replace("", "Sem canal")
+
+        grouped = vendas.groupby("canal", dropna=False).agg(
+            receita_bruta=("receita_bruta", "sum"),
+            receita_liquida=("receita_liquida", "sum"),
+            custo_produto=("custo_produto", "sum"),
+            custo_frete=("custo_frete", "sum"),
+            margem_contribuicao=("margem_contribuicao", "sum"),
+            pedidos_aprovados=("order_id", "nunique"),
+            unidades=("quantidade", "sum"),
+        ).reset_index()
+
+        grouped["margem_pct"] = grouped.apply(
+            lambda r: (r["margem_contribuicao"] / r["receita_liquida"]) if r["receita_liquida"] else 0.0,
+            axis=1,
+        )
+
+        records = []
+        for row in grouped.to_dict("records"):
+            records.append({
+                "canal": row["canal"],
+                "receita_bruta": float(row["receita_bruta"]),
+                "receita_liquida": float(row["receita_liquida"]),
+                "custo_produto": float(row["custo_produto"]),
+                "custo_frete": float(row["custo_frete"]),
+                # The case already provides contribution margin after product cost and freight.
+                "margem_contribuicao_apos_frete_antes_impostos": float(row["margem_contribuicao"]),
+                "margem_pct_apos_frete_antes_impostos": float(row["margem_pct"]),
+                "pedidos_aprovados": int(row["pedidos_aprovados"]),
+                "unidades": float(row["unidades"]),
+            })
+
+        tax_cols = []
+        try:
+            from .data_source import detect_tax_columns
+            tax_cols = detect_tax_columns(vendas)
+        except Exception:
+            tax_cols = []
+
+        order_by = str(args.get("order_by", "margem_contribuicao_apos_frete_antes_impostos"))
+        descending = bool(args.get("descending", True))
+        valid = {
+            "margem_contribuicao_apos_frete_antes_impostos",
+            "margem_pct_apos_frete_antes_impostos",
+            "receita_liquida",
+            "pedidos_aprovados",
+        }
+        if order_by not in valid:
+            order_by = "margem_contribuicao_apos_frete_antes_impostos"
+        records.sort(key=lambda x: x.get(order_by, 0), reverse=descending)
+
+        return {
+            "area": "channel_economics",
+            "found": bool(records),
+            "source": "vendas.csv — universo aprovado",
+            "source_path": str(source),
+            "status": "validated" if records else "empty",
+            "dashboard_used": False,
+            "metric_definition": {
+                "margem_contribuicao_apos_frete": "campo margem_contribuicao do Data Room, agregado no universo aprovado por canal; representa a contribuição após os custos já incorporados pelo case, incluindo frete, e antes de impostos.",
+                "margem_pct_apos_frete": "margem de contribuição / receita líquida do canal.",
+            },
+            "channels": records,
+            "taxes": {
+                "available": bool(tax_cols),
+                "columns_detected": tax_cols,
+                "note": "Não há imposto/alíquota determinísticos no Data Room validado." if not tax_cols else "Campos tributários detectados; revisão da semântica tributária ainda é recomendada antes de chamar o resultado de CM2 pós-impostos.",
+            },
+            "limitations": [
+                "A base de vendas não possui imposto/alíquota determinísticos no schema validado; o resultado é pré-impostos.",
+                "Abertura por canal descreve o canal registrado na venda; não é atribuição 1:1 de marketing.",
+                "Não subtrair investimento de marketing desta margem.",
+            ],
+            "governance": {
+                "not_net_income": True,
+                "not_after_tax": not bool(tax_cols),
+                "dashboard_used": False,
+            },
+            "query_parameters": {"order_by": order_by, "descending": descending},
+        }
+
+    def get_break_even_point(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Calcula um limiar indicativo usando vendas reais e valida H5/H8 por faixas de AOV."""
+        try:
+            vendas, source = self.context.sales_approved(), self.context.sales_source
+        except (FileNotFoundError, ValueError) as exc:
+            return {
+                "found": False,
+                "area": "break_even",
+                "source": "Data Room/vendas.csv",
+                "status": "data_source_unavailable",
+                "message": str(exc),
+                "dashboard_used": False,
+            }
+
+        if "receita_liquida" not in vendas.columns or "custo_frete" not in vendas.columns or "margem_contribuicao" not in vendas.columns:
+            return {
+                "found": False,
+                "area": "break_even",
+                "status": "invalid_data",
+                "message": "A base validada não possui receita_liquida, custo_frete e margem_contribuicao para o cálculo.",
+            }
+
+        order_agg = vendas.groupby("order_id", dropna=False).agg(
+            receita_liquida=("receita_liquida", "sum"),
+            custo_frete=("custo_frete", "sum"),
+            margem_contribuicao=("margem_contribuicao", "sum"),
+            quantidade=("quantidade", "sum"),
+        ).reset_index()
+        order_agg = order_agg[order_agg["receita_liquida"] > 0].copy()
+        order_agg["contribuicao_pre_frete"] = order_agg["margem_contribuicao"] + order_agg["custo_frete"]
+        total_revenue = float(order_agg["receita_liquida"].sum())
+        pre_freight_rate = float(order_agg["contribuicao_pre_frete"].sum() / total_revenue) if total_revenue else 0.0
+        avg_freight = float(order_agg["custo_frete"].mean()) if len(order_agg) else 0.0
+        current_aov = float(total_revenue / len(order_agg)) if len(order_agg) else 0.0
+        indicative_aov = float(avg_freight / pre_freight_rate) if pre_freight_rate > 0 else 0.0
+
+        bins = [-float("inf"), 100, 250, 500, 750, 1000, 1500, float("inf")]
+        labels = ["< R$100", "R$100–249", "R$250–499", "R$500–749", "R$750–999", "R$1.000–1.499", "R$1.500+"]
+        order_agg["faixa_aov"] = pd.cut(order_agg["receita_liquida"], bins=bins, labels=labels, right=False)
+        order_agg["frete_pct_aov"] = order_agg["custo_frete"] / order_agg["receita_liquida"].replace(0, pd.NA)
+        order_agg["margem_negativa"] = order_agg["margem_contribuicao"] < 0
+
+        band = order_agg.groupby("faixa_aov", observed=False).agg(
+            pedidos=("order_id", "count"),
+            aov_medio=("receita_liquida", "mean"),
+            frete_medio=("custo_frete", "mean"),
+            taxa_margem_negativa=("margem_negativa", "mean"),
+            frete_pct_medio=("frete_pct_aov", "mean"),
+        ).reset_index()
+        band_records = [
+            {
+                "faixa_aov": str(r["faixa_aov"]),
+                "pedidos": int(r["pedidos"]),
+                "aov_medio": float(r["aov_medio"]),
+                "frete_medio": float(r["frete_medio"]),
+                "taxa_margem_negativa": float(r["taxa_margem_negativa"]),
+                "frete_pct_medio": float(r["frete_pct_medio"]) if pd.notna(r["frete_pct_medio"]) else 0.0,
+            }
+            for r in band.to_dict("records")
+            if int(r["pedidos"]) > 0
+        ]
+
+        category = args.get("categoria")
+        category_sensitivity = []
+        if "categoria" in vendas.columns:
+            for cat, group in vendas.groupby("categoria", dropna=False):
+                cat_orders = group.groupby("order_id", dropna=False).agg(
+                    receita_liquida=("receita_liquida", "sum"),
+                    custo_frete=("custo_frete", "sum"),
+                    margem_contribuicao=("margem_contribuicao", "sum"),
+                ).reset_index()
+                cat_orders = cat_orders[cat_orders["receita_liquida"] > 0]
+                if cat_orders.empty:
+                    continue
+                cat_pre_rate = float((cat_orders["margem_contribuicao"] + cat_orders["custo_frete"]).sum() / cat_orders["receita_liquida"].sum())
+                cat_frete = float(cat_orders["custo_frete"].mean())
+                category_sensitivity.append({
+                    "categoria": str(cat) if pd.notna(cat) else "Sem categoria",
+                    "pedidos": int(len(cat_orders)),
+                    "frete_medio": cat_frete,
+                    "taxa_contribuicao_pre_frete": cat_pre_rate,
+                    "aov_break_even_indicativo": float(cat_frete / cat_pre_rate) if cat_pre_rate > 0 else 0.0,
+                })
+
+        selected_category = None
+        if category:
+            selected_category = next((x for x in category_sensitivity if x["categoria"].lower() == str(category).lower()), None)
+            if selected_category is None:
+                return {
+                    "found": False,
+                    "area": "break_even",
+                    "source": "vendas.csv — universo aprovado",
+                    "status": "category_not_found",
+                    "dashboard_used": False,
+                    "query_parameters": {"categoria": category},
+                }
+
+        negative_orders = order_agg[order_agg["margem_negativa"]]
+        result = {
+            "aov_break_even_indicativo": indicative_aov,
+            "aov_atual_medio": current_aov,
+            "frete_medio": avg_freight,
+            "taxa_contribuicao_pre_frete": pre_freight_rate,
+            "pedidos_analisados": int(len(order_agg)),
+            "pedidos_margem_negativa": int(len(negative_orders)),
+            "taxa_margem_negativa": float(len(negative_orders) / len(order_agg)) if len(order_agg) else 0.0,
+            "pedidos_abaixo_aov_indicativo": int((order_agg["receita_liquida"] < indicative_aov).sum()) if indicative_aov > 0 else 0,
+            "taxa_abaixo_aov_indicativo": float((order_agg["receita_liquida"] < indicative_aov).mean()) if indicative_aov > 0 and len(order_agg) else 0.0,
+        }
+        if selected_category:
+            result = selected_category
+
+        return {
+            "found": True,
+            "area": "break_even",
+            "source": "vendas.csv — universo aprovado",
+            "source_path": str(source),
+            "status": "validated_indicative",
+            "dashboard_used": False,
+            "inputs": {
+                "aov_atual_medio": current_aov,
+                "frete_medio": avg_freight,
+                "taxa_contribuicao_pre_frete": pre_freight_rate,
+            },
+            "method": {
+                "formula": "AOV_break_even_indicativo = frete_medio_do_pedido / taxa_de_contribuicao_pre_frete_agregada",
+                "definition": "Limiar indicativo: valor de receita líquida de um pedido no qual a taxa de contribuição pré-frete agregada consegue absorver o frete médio observado.",
+                "order_level_validation": "A base também é segmentada por faixas de AOV para observar taxa real de margem negativa e peso médio do frete.",
+            },
+            "result": result,
+            "category_sensitivity": category_sensitivity,
+            "aov_band_analysis": band_records,
+            "negative_margin_reference": {
+                "frete_medio_pedidos_margem_negativa": float(negative_orders["custo_frete"].mean()) if len(negative_orders) else 0.0,
+                "frete_medio_demais_pedidos": float(order_agg.loc[~order_agg["margem_negativa"], "custo_frete"].mean()) if len(order_agg.loc[~order_agg["margem_negativa"]]) else 0.0,
+            },
+            "limitations": [
+                "Não há imposto/alíquota no Data Room validado; o limiar não representa CM2 pós-impostos.",
+                "Frete varia por pedido; R$ do break-even é um limiar indicativo, não uma regra universal de checkout.",
+                "Não modela elasticidade de demanda, conversão ou alteração do mix ao elevar o AOV mínimo.",
+                "A validação operacional deve observar faixas de AOV e perfil de frete, não apenas a média global.",
+            ],
+            "query_parameters": {"categoria": category},
+        }
+
     def get_prioritized_opportunities(self, _: Dict[str, Any]) -> Dict[str, Any]:
         portfolio = []
         by_id = {o.get("id"): o for o in self.context.opportunities}
@@ -334,6 +580,23 @@ def build_langchain_tools(registry: ToolRegistry) -> List[Any]:
             ensure_ascii=False,
         )
 
+    @tool("get_channel_margin")
+    def get_channel_margin(
+        order_by: Literal["margem_contribuicao_apos_frete_antes_impostos", "margem_pct_apos_frete_antes_impostos", "receita_liquida", "pedidos_aprovados"] = "margem_contribuicao_apos_frete_antes_impostos",
+        descending: bool = True,
+    ) -> str:
+        return json.dumps(
+            registry.execute("get_channel_margin", {"order_by": order_by, "descending": descending}).result,
+            ensure_ascii=False,
+        )
+
+    @tool("get_break_even_point")
+    def get_break_even_point(categoria: str = "") -> str:
+        return json.dumps(
+            registry.execute("get_break_even_point", {"categoria": categoria or None}).result,
+            ensure_ascii=False,
+        )
+
     return [
         get_margin_opportunities,
         get_marketing_efficiency,
@@ -343,4 +606,6 @@ def build_langchain_tools(registry: ToolRegistry) -> List[Any]:
         get_opportunity_by_id,
         get_product_details,
         get_product_ranking,
+        get_channel_margin,
+        get_break_even_point,
     ]

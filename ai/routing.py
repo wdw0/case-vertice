@@ -12,6 +12,8 @@ AUTHORIZED_TOOLS = (
     "get_opportunity_by_id",
     "get_product_details",
     "get_product_ranking",
+    "get_channel_margin",
+    "get_break_even_point",
 )
 
 ROUTES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
@@ -27,6 +29,25 @@ ROUTES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             "portfólio priorizado", "portfolio priorizado", "todas as frentes",
             "todas as áreas", "toda a empresa", "panorama geral", "visão geral",
             "visao geral", "problemas em geral", "outras frentes",
+        ),
+    ),
+    (
+        "get_break_even_point",
+        (
+            "break-even", "break even", "ponto de equilíbrio", "ponto de equilibrio",
+            "aov mínimo", "aov minimo", "valor mínimo de carrinho", "valor minimo de carrinho",
+            "ticket mínimo", "ticket minimo", "cesta mínima", "cesta minima",
+            "frete não consuma a margem", "frete nao consuma a margem",
+            "frete consumir a margem", "frete consome a margem", "frete não consuma margem",
+        ),
+    ),
+    (
+        "get_channel_margin",
+        (
+            "margem por canal", "margem de contribuição por canal", "margem de contribuicao por canal",
+            "cm2", "cm 2", "cmii", "lucro por canal", "lucro líquido por canal",
+            "lucro liquido por canal", "rentabilidade por canal", "contribuição por canal",
+            "contribuicao por canal", "abertura de margem por canal",
         ),
     ),
     # Inventory comes before product queries so category/rupture/coverage questions stay in inventory.
@@ -156,6 +177,23 @@ def infer_tool_arguments(question: str, tool_name: Optional[str]) -> Dict[str, A
     if tool_name == "get_opportunity_by_id":
         match = re.search(r"opp-(?:mar|mkt|est|atd)-\d+", q, re.IGNORECASE)
         return {"id": match.group(0).upper()} if match else {}
+
+    if tool_name == "get_channel_margin":
+        if "menor margem" in q or "menor rentabilidade" in q:
+            return {"order_by": "margem_pct_apos_frete_antes_impostos", "descending": False}
+        if "maior margem percentual" in q or "maior rentabilidade" in q:
+            return {"order_by": "margem_pct_apos_frete_antes_impostos", "descending": True}
+        if "maior receita" in q or "maior faturamento" in q:
+            return {"order_by": "receita_liquida", "descending": True}
+        return {"order_by": "margem_contribuicao_apos_frete_antes_impostos", "descending": True}
+
+    if tool_name == "get_break_even_point":
+        args: Dict[str, Any] = {}
+        for category in ("beleza", "moda", "lifestyle", "acessórios", "acessorios"):
+            if category in q:
+                args["categoria"] = "Acessórios" if category in {"acessórios", "acessorios"} else category.title()
+                break
+        return args
 
     if tool_name == "get_marketing_efficiency":
         if "menor cac" in q or "menor custo de aquisição" in q or "cac mais baixo" in q:

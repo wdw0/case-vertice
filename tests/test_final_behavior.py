@@ -107,3 +107,17 @@ def test_product_query_agent_routes_by_catalog_entity():
 
     agent = VerticeAgent("data/vertice_ai_context.json", llm=NoopLLM())
     assert agent._route("O que vc tem a dizer sobre o item Calça Jeans Moderno Nude", []) == "get_product_details"
+
+
+def test_channel_margin_router_is_deterministic():
+    q = "Abertura de Margem de Contribuição por Canal (CM2)"
+    tool = infer_tool_for_question(q)
+    assert tool == "get_channel_margin"
+    assert infer_tool_arguments(q, tool)["order_by"] == "margem_contribuicao_apos_frete_antes_impostos"
+
+
+def test_break_even_router_is_deterministic():
+    q = "Qual o valor mínimo de carrinho necessário para que o frete não consuma a margem?"
+    tool = infer_tool_for_question(q)
+    assert tool == "get_break_even_point"
+    assert infer_tool_arguments("Qual o AOV mínimo para Moda?", tool) == {"categoria": "Moda"}

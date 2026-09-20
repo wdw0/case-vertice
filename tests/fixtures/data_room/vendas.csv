@@ -1,0 +1,7 @@
+order_id,canal,status_pagamento,receita_bruta,receita_liquida,custo_produto,custo_frete,margem_contribuicao,quantidade,categoria
+ORD-0001,Google Ads,Aprovado,100,100,40,10,50,1,Moda
+ORD-0002,Google Ads,Aprovado,200,180,60,20,100,2,Moda
+ORD-0003,Marketplace,Aprovado,50,50,35,25,-10,1,Beleza
+ORD-0004,Marketplace,Aprovado,300,300,140,30,130,3,Beleza
+ORD-0005,Influenciador,Cancelado,500,450,200,40,210,4,Moda
+ORD-0006,Email Marketing,Aguardando,400,380,150,25,205,3,Lifestyle

@@ -3,9 +3,8 @@
   "generated_at": "2026-09-17T20:35:59.297647",
   "source": {
     "primary": "Data Room CSV + camada analítica determinística Python",
-    "dashboard_json": "process_data.json",
-    "dashboard_json_status": "requires_review",
-    "structured_views": "Derivadas deterministicamente dos CSVs do Data Room; não do process_data.json.",
+    "structured_views": "Views centrais derivadas deterministicamente dos CSVs do Data Room.",
+    "dashboard_relationship": "O Dashboard é uma aplicação separada e não é fonte factual do Copilot.",
     "copilot_scope": {
       "sales": "Data Room completo após exclusão do registro de vendas com campos financeiros ausentes; KPIs comerciais usam o universo aprovado quando indicado.",
       "marketing": "marketing.csv completo após limpeza de tipos; ROAS/CAC usam receita_gerada, investimento_reais e conversoes da própria base.",
@@ -13,7 +12,8 @@
       "support": "atendimento.csv completo após exclusão do registro artefato ticket_id=TKT.",
       "dashboard_relationship": "process_data.json é artefato de dashboard com escopo temporal próprio; não é fonte factual do Copilot.",
       "products": "Produtos: agregação determinística de vendas por sku_id/produto; rentabilidade = margem de contribuição / receita bruta; atributos de estoque vêm de estoque.csv como snapshot."
-    }
+    },
+    "provisional_views": []
   },
   "executive_kpis": {
     "comercial": {
@@ -357,7 +357,6 @@
     }
   ],
   "governance": {
-    "dashboard_json_requires_review": true,
     "human_in_the_loop": true,
     "llm_role": "interpretar e sintetizar contexto estruturado; não recalcular KPIs",
     "known_limits": [
@@ -366,7 +365,9 @@
       "Frete reverso em devoluções é uma premissa estimada.",
       "Risco individual de churn requer classificador/validação posterior de NLP.",
       "Pedidos em ruptura não têm perda realizada observada por SKU; a ferramenta pode estimar receita potencial bloqueada durante o lead time, que deve ser tratada como potencial.",
-      "Para SKUs com cobertura teórica elevada, custo_estoque_associado é exposição potencial baseada em custo, não perda realizada nem prova de estoque permanentemente parado."
+      "Para SKUs com cobertura teórica elevada, custo_estoque_associado é exposição potencial baseada em custo, não perda realizada nem prova de estoque permanentemente parado.",
+      "Não há campo determinístico de imposto/alíquota no Data Room validado; CM2 pós-impostos não pode ser calculado sem premissa externa.",
+      "Margem por canal e break-even são calculados diretamente de vendas.csv no universo aprovado quando consultados pelo Copilot."
     ]
   },
   "analysis_views": {

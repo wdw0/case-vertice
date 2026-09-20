@@ -10,8 +10,11 @@ from typing import Any, Dict, Iterable, List, Optional
 class ContextStore:
     """Read-only access to the audited Vértice AI context contract."""
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, data_room_path: str | Path | None = None):
         self.path = Path(path)
+        self.data_room_path = Path(data_room_path).expanduser() if data_room_path else None
+        self._sales_cache = None
+        self._sales_source = None
         if not self.path.exists():
             raise FileNotFoundError(f"Contexto não encontrado: {self.path}")
         with self.path.open("r", encoding="utf-8") as f:
@@ -33,6 +36,19 @@ class ContextStore:
         product_view = (self.data.get("analysis_views") or {}).get("product_analytics")
         if product_view is not None and not isinstance(product_view.get("records"), list):
             raise ValueError("Contexto inválido; product_analytics.records deve ser uma lista")
+
+
+    def sales_approved(self):
+        if self._sales_cache is None:
+            from .data_source import load_approved_sales
+            self._sales_cache, self._sales_source = load_approved_sales(self.path, self.data_room_path)
+        return self._sales_cache.copy()
+
+    @property
+    def sales_source(self):
+        if self._sales_cache is None:
+            self.sales_approved()
+        return self._sales_source
 
     @property
     def kpis(self) -> Dict[str, Any]:

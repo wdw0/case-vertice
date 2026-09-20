@@ -249,6 +249,39 @@ class VerticeAgent:
                 lines.append("A decisão de verba deve ser validada por testes incrementais e retorno marginal; os valores são da base de marketing.")
                 return "\n".join(lines)
 
+        if selected_tool == "get_channel_margin":
+            channels = result.get("channels") or []
+            if result.get("found") and channels:
+                lines += ["**Margem de contribuição por canal (após frete, antes de impostos)**", ""]
+                for c in channels:
+                    lines.append(
+                        f"- {c.get('canal')}: margem R$ {float(c.get('margem_contribuicao_apos_frete_antes_impostos', 0)):,.2f} "
+                        f"({float(c.get('margem_pct_apos_frete_antes_impostos', 0))*100:.2f}%) | "
+                        f"receita líquida R$ {float(c.get('receita_liquida', 0)):,.2f}"
+                    )
+                lines.append("")
+                lines.append("Impostos não estão disponíveis de forma determinística no Data Room; portanto, isto não é CM2 pós-impostos nem lucro líquido.")
+                return "\n".join(lines)
+            return result.get("message") or "A base de vendas não está disponível para esta análise."
+
+        if selected_tool == "get_break_even_point":
+            if result.get("found") and result.get("result"):
+                r = result["result"]
+                if "aov_break_even_indicativo" in r:
+                    lines += ["**Break-even indicativo de AOV**", ""]
+                    lines.append(f"- AOV mínimo indicativo: R$ {float(r.get('aov_break_even_indicativo', 0)):,.2f}")
+                    lines.append(f"- AOV médio observado: R$ {float(r.get('aov_atual_medio', 0)):,.2f}")
+                    lines.append(f"- Frete médio: R$ {float(result.get('inputs', {}).get('frete_medio', 0)):,.2f}")
+                    lines.append(f"- Taxa de contribuição pré-frete: {float(result.get('inputs', {}).get('taxa_contribuicao_pre_frete', 0))*100:.2f}%")
+                    ref = result.get("negative_margin_reference") or {}
+                    if ref:
+                        lines.append(f"- Frete médio nos pedidos com margem negativa: R$ {float(ref.get('frete_medio_pedidos_margem_negativa', 0)):,.2f}")
+                        lines.append(f"- Frete médio nos demais pedidos: R$ {float(ref.get('frete_medio_demais_pedidos', 0)):,.2f}")
+                    lines.append("")
+                    lines.append("O valor é indicativo; a análise por faixa de AOV é a referência mais adequada para validar a hipótese operacional.")
+                    return "\n".join(lines)
+            return result.get("message") or "A base de vendas não está disponível para esta análise."
+
         if selected_tool == "get_inventory_opportunities":
             stockouts = result.get("stockouts_high_demand") or []
             coverage = result.get("high_coverage") or []
