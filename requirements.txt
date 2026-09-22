@@ -1,11 +1,16 @@
 pyOpenSSL==26.2.0
 cryptography>=46.0.5,<49.0.0
+
 langgraph>=1.0,<2.0
 langchain-core>=1.0,<2.0
 langchain-litellm>=0.7,<0.8
 litellm>=1.70
+
 pydantic>=2.7,<3.0
 typing-extensions>=4.12
 python-dotenv>=1.0
-pytest>=8.0
+
 pandas>=2.2,<3.0
+streamlit>=1.40,<2.0
+
+pytest>=8.0
